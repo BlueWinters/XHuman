@@ -14,12 +14,52 @@ class LibSapiensWrapper:
     """
     """
     @staticmethod
+    def drawMaps(img, person_boxes, normal_maps, segmentation_maps, depth_maps):
+        draw_img = []
+        segmentation_img = img.copy()
+        for segmentation_map, box in zip(segmentation_maps, person_boxes):
+            mask = segmentation_map > 0
+            crop = segmentation_img[box[1]:box[3], box[0]:box[2]]
+            segmentation_draw = SapiensSegmentation.visualSegmentationMap(segmentation_map)
+            crop_draw = cv2.addWeighted(crop, 0.5, segmentation_draw, 0.7, 0)
+            segmentation_img[box[1]:box[3], box[0]:box[2]] = crop_draw * mask[..., None] + crop * ~mask[..., None]
+        draw_img.append(segmentation_img)
+
+        if len(normal_maps) > 0:
+            normal_img = img.copy()
+            for i, (normal_map, box) in enumerate(zip(normal_maps, person_boxes)):
+                mask = segmentation_maps[i] > 0
+                crop = normal_img[box[1]:box[3], box[0]:box[2]]
+                normal_draw = SapiensNormal.visualNormalMap(normal_map)
+                crop_draw = cv2.addWeighted(crop, 0.5, normal_draw, 0.7, 0)
+                normal_img[box[1]:box[3], box[0]:box[2]] = crop_draw * mask[..., None] + crop * ~mask[..., None]
+            draw_img.append(normal_img)
+
+        if len(depth_maps) > 0:
+            depth_img = img.copy()
+            for i, (depth_map, box) in enumerate(zip(depth_maps, person_boxes)):
+                mask = segmentation_maps[i] > 0
+                crop = depth_img[box[1]:box[3], box[0]:box[2]]
+                depth_map[~mask] = 0
+                depth_draw = SapiensDepth.visualDepthMap(depth_map)
+                crop_draw = cv2.addWeighted(crop, 0.5, depth_draw, 0.7, 0)
+                depth_img[box[1]:box[3], box[0]:box[2]] = crop_draw * mask[..., None] + crop * ~mask[..., None]
+            draw_img.append(depth_img)
+
+        return np.hstack(draw_img)
+    
+    @staticmethod
     def benchmark():
         module = LibSapiensWrapper()
         module.initialize()
-        bgr = cv2.imread('benchmark/asset/sapiens/test.png')
-        out = module(bgr, output_maps=['segmentation_03b'])
-        cv2.imwrite('benchmark/asset/sapiens/output/segmentation_test1.png', out)
+        bgr = cv2.imread('benchmark/asset/sapiens/input.png')
+        segmentation_maps, depth_maps, normal_maps, person_boxes = module(
+            bgr, targets=['segmentation_03b', 'depth_03b', 'normal_03b', 'person_boxes'])
+        # cv2.imwrite('benchmark/asset/sapiens/output_segment.png', segmentation_maps[0])
+        # cv2.imwrite('benchmark/asset/sapiens/output_depth.png', (255-depth_maps[0]*255).astype(np.uint8))
+        # cv2.imwrite('benchmark/asset/sapiens/output_normal.png', normal_maps[0])
+        visual = LibSapiensWrapper.drawMaps(bgr, person_boxes, normal_maps, segmentation_maps, depth_maps)
+        cv2.imwrite('benchmark/asset/sapiens/output_visual.png', visual)
 
     @staticmethod
     def getResources():
@@ -66,42 +106,8 @@ class LibSapiensWrapper:
             if 'normal' == name:
                 self.model_dict[model_name] = SapiensNormal(path)
         return self.model_dict[model_name]
-    
-    def drawMaps(self, img, person_boxes, normal_maps, segmentation_maps, depth_maps):
-        draw_img = []
-        segmentation_img = img.copy()
-        for segmentation_map, box in zip(segmentation_maps, person_boxes):
-            mask = segmentation_map > 0
-            crop = segmentation_img[box[1]:box[3], box[0]:box[2]]
-            segmentation_draw = SapiensSegmentation.visualSegmentationMap(segmentation_map)
-            crop_draw = cv2.addWeighted(crop, 0.5, segmentation_draw, 0.7, 0)
-            segmentation_img[box[1]:box[3], box[0]:box[2]] = crop_draw * mask[..., None] + crop * ~mask[..., None]
-        draw_img.append(segmentation_img)
 
-        if len(normal_maps) > 0:
-            normal_img = img.copy()
-            for i, (normal_map, box) in enumerate(zip(normal_maps, person_boxes)):
-                mask = segmentation_maps[i] > 0
-                crop = normal_img[box[1]:box[3], box[0]:box[2]]
-                normal_draw = SapiensNormal.visualNormalMap(normal_map)
-                crop_draw = cv2.addWeighted(crop, 0.5, normal_draw, 0.7, 0)
-                normal_img[box[1]:box[3], box[0]:box[2]] = crop_draw * mask[..., None] + crop * ~mask[..., None]
-            draw_img.append(normal_img)
-
-        if len(depth_maps) > 0:
-            depth_img = img.copy()
-            for i, (depth_map, box) in enumerate(zip(depth_maps, person_boxes)):
-                mask = segmentation_maps[i] > 0
-                crop = depth_img[box[1]:box[3], box[0]:box[2]]
-                depth_map[~mask] = 0
-                depth_draw = SapiensDepth.visualDepthMap(depth_map)
-                crop_draw = cv2.addWeighted(crop, 0.5, depth_draw, 0.7, 0)
-                depth_img[box[1]:box[3], box[0]:box[2]] = crop_draw * mask[..., None] + crop * ~mask[..., None]
-            draw_img.append(depth_img)
-
-        return np.hstack(draw_img)
-
-    def detect(self, bgr):
+    def detect(self, bgr, pre_detection=False):
         def filterSmallBoxes(boxes: np.ndarray, img_height: int, height_thres: float = 0.1) -> np.ndarray:
             person_boxes = []
             for box in boxes:
@@ -124,9 +130,9 @@ class LibSapiensWrapper:
             return np.array(expanded_boxes)
 
         shape = bgr.shape
-        # detector = XManager.getModules('human_detection_yolox')(bgr)
-        if detector is not None:
+        if pre_detection is True or isinstance(pre_detection, str):
             # detecting people
+            detector = XManager.getModules('human_detection_yolox')(bgr)
             person_boxes = detector.detect(bgr)
             person_boxes = filterSmallBoxes(person_boxes, shape[0], self.minimum_person_height)
             if len(person_boxes) == 0:
@@ -136,21 +142,22 @@ class LibSapiensWrapper:
             person_boxes = [[0, 0, shape[1], shape[0]]]
         return person_boxes
 
-    def inference(self, bgr, output_maps, *args, **kwargs):
-        person_boxes = self.detect(bgr)
+    def inference(self, bgr, output_maps, pre_detection, *args, **kwargs):
+        person_boxes = self.detect(bgr, pre_detection)
         result_dict = dict()
         for box in person_boxes:
             crop = bgr[box[1]:box[3], box[0]:box[2]]
             for map_type in output_maps:
-                name, ckpt = map_type.split('_')
-                if name not in result_dict:
-                    result_dict[name] = list()
-                result_dict[name].append(self.getPredictor(name, ckpt)(crop))
+                if map_type in self.ConfigDict:
+                    name, ckpt = map_type.split('_')
+                    if name not in result_dict:
+                        result_dict[name] = list()
+                    result_dict[name].append(self.getPredictor(name, ckpt)(crop))
         # visual results
         normal_maps = result_dict.pop('normal', [])
         segmentation_maps = result_dict.pop('segmentation', [])
         depth_maps = result_dict.pop('depth', [])
-        return self.drawMaps(bgr, person_boxes, normal_maps, segmentation_maps, depth_maps)
+        return person_boxes, (segmentation_maps, depth_maps, normal_maps)
 
     """
     """
@@ -159,16 +166,22 @@ class LibSapiensWrapper:
             logging.warning('{} useless parameters in {}'.format(
                 len(args), self.__class__.__name__))
         # segmentation, depth, normal
-        targets = kwargs.pop('targets', 'source')
-        output_maps = kwargs.pop('output_maps', 'segmentation_03b')
-        for out in output_maps:
-            assert out in self.ConfigDict, out
-        return targets, dict(output_maps=output_maps)
+        targets = kwargs.pop('targets', 'segmentation_03b')
+        output_maps = targets if isinstance(targets, (list, tuple)) else [targets]
+        pre_detection = kwargs.pop('pre_detection', False)
+        return targets, dict(output_maps=output_maps, pre_detection=pre_detection)
 
-    def _returnResult(self, output, targets):
+    def _returnResult(self, person_boxes, output, targets):
         def _formatResult(target):
-            if target == 'source':
-                return output
+            segmentation_maps, depth_maps, normal_maps = output
+            if target[:12] == 'segmentation':
+                return segmentation_maps
+            if target[:5] == 'depth':
+                return depth_maps
+            if target[:6] == 'normal':
+                return normal_maps
+            if target == 'person_boxes':
+                return person_boxes
             raise Exception('no such return type {}'.format(target))
 
         if isinstance(targets, str):
@@ -179,5 +192,5 @@ class LibSapiensWrapper:
 
     def __call__(self, bgr, *args, **kwargs):
         targets, inference_kwargs = self._extractArgs(*args, **kwargs)
-        output = self.inference(bgr, **inference_kwargs)
-        return self._returnResult(output, targets)
+        person_boxes, output = self.inference(bgr, **inference_kwargs)
+        return self._returnResult(person_boxes, output, targets)

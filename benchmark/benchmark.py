@@ -2,6 +2,8 @@
 import os
 import numpy as np
 import cv2
+import sys
+sys.path.append('.')
 
 
 def configLogging():
@@ -59,6 +61,6 @@ if __name__ == '__main__':
     # Benchmark_Base.benchmark_XPortrait()
 
     # Benchmark_Thirdparty.benchmark_YoloX()
-    # Benchmark_Thirdparty.benchmark_Sapiens()
+    Benchmark_Thirdparty.benchmark_Sapiens()
     # Benchmark_Thirdparty.benchmark_RTMPose()
-    Benchmark_Thirdparty.benchmark_XBody()
+    # Benchmark_Thirdparty.benchmark_XBody()
