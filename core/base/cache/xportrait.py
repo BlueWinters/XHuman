@@ -37,10 +37,20 @@ class XPortrait(XCache):
         xcache.save('benchmark/asset/xportrait/{}/xcache.pkl'.format(suffix))
 
     @staticmethod
-    def packageAsCache(source):
+    def packageAsCache(source, **kwargs):
         assert isinstance(source, (np.ndarray, XPortrait)), type(source)
-        cache = XPortrait(bgr=source) if isinstance(source, np.ndarray) else source
+        cache = XPortrait(bgr=source, **kwargs) if isinstance(source, np.ndarray) else source
         return cache
+
+    @staticmethod
+    def toCache(source, **kwargs):
+        assert isinstance(source, (str, np.ndarray, XPortrait)), type(source)
+        if isinstance(source, str):
+            if source.endswith('pkl'):
+                source = XPortrait.load(source, verbose=False)
+            if source.endswith('png') or source.endswith('jpg'):
+                source = cv2.imread(source)
+        return XPortrait.packageAsCache(source, asserting=False)
 
     """
     global config
@@ -57,7 +67,7 @@ class XPortrait(XCache):
         self.strategy = kwargs.pop('strategy', 'area')
         assert self.strategy in ['area', 'score', 'pose'], self.strategy
         # assert flag
-        self.asserting = kwargs.pop('asserting', True)
+        self.asserting = kwargs.pop('asserting', False)
 
     def local(self):
         return bool(self.url == '127.0.0.0')
@@ -67,7 +77,7 @@ class XPortrait(XCache):
             from ... import XManager
             return XManager.getModules(module)
         else:
-            from ....serving.xruntime import XRuntime
+            from serving.xruntime import XRuntime
             function = lambda *args, **kwargs: \
                 XRuntime(module, url=self.url)(*args, **kwargs)
             return function
@@ -133,6 +143,22 @@ class XPortrait(XCache):
             # small --> huge
             radians_abs_sum = np.sum(np.abs(radians), axis=1)
             return _return(np.argsort(radians_abs_sum))
+        if strategy == 'lft2rig':
+            # from left to right
+            center_x = (boxes[:, 0] + boxes[:, 2]) // 2
+            return _return(np.argsort(center_x))
+        if strategy == 'rig2lft':
+            # from right to left
+            center_x = (boxes[:, 0] + boxes[:, 2]) // 2
+            return _return(np.argsort(center_x)[::-1])
+        if strategy == 'top2dwn':
+            # from top to down
+            center_y = (boxes[:, 1] + boxes[:, 3]) // 2
+            return _return(np.argsort(center_y))
+        if strategy == 'dwn2top':
+            # from down to top
+            center_y = (boxes[:, 1] + boxes[:, 3]) // 2
+            return _return(np.argsort(center_y)[::-1])
         raise NotImplementedError('no such sorting strategy: {}'.format(strategy))
 
     def _detect(self, bgr):
@@ -185,6 +211,31 @@ class XPortrait(XCache):
         if not hasattr(self, '_radian'):
             self._detect(self.bgr)
         return self._radian
+
+    @property
+    def visual_boxes(self):
+        if not hasattr(self, '_visual_boxes'):
+            self._visual_boxes = self._getModule('face_detection').visual_targets_cv2(
+                np.copy(self.bgr), self.score, self.box, self.points, options=(False, False))
+        return self._visual_boxes
+
+    @property
+    def visual_landmarks(self):
+        if not hasattr(self, '_visual_landmarks'):
+            self._visual_landmarks = self._getModule('face_landmark').visual(np.copy(self.bgr), self.landmark)
+        return self._visual_landmarks
+
+    @property
+    def visual_headpose(self):
+        if not hasattr(self, '_visual_headpose'):
+            self._visual_headpose = self._getModule('head_pose').visual(np.copy(self.bgr), self.radian, self.landmark)
+        return self._visual_headpose
+
+    @property
+    def visual_base(self):
+        if not hasattr(self, '_visual_base'):
+            self._visual_base = self._getModule('function').visual(np.copy(self.bgr), self.landmark, self.radian)
+        return self._visual_base
 
     """
     face identity embedding

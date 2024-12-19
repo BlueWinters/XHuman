@@ -126,7 +126,7 @@ class LibYoloXWrapper:
             pack_dets = (outputs[0, :, :4], outputs[0, :, 4])
             final_boxes, final_scores = pack_dets
             final_boxes /= ratio
-            isscore = final_scores > 0.3
+            isscore = final_scores > 0.5
             isbbox = [i for i in isscore]
             final_boxes = final_boxes[isbbox]
             final_scores = final_scores[isbbox]

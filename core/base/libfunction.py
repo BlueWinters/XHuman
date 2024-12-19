@@ -16,15 +16,11 @@ class LibFunction:
     """
     """
     @staticmethod
-    def visual(bgr, landmarks:list, radians:list):
+    def visual(bgr, landmarks, radians):
         face_landmark, head_pose = XManager.getModules(['face_landmark', 'head_pose'])
         for n, (points, radian) in enumerate(zip(landmarks, radians)):
             bgr = face_landmark.visual(bgr, points)
-            yaw, pitch, roll = (radian.astype(np.float32) * 180 / np.pi).tolist()
-            cx, cy = np.mean(points, axis=0).round().astype(np.int32).tolist()
-            size = (np.max(points[:,0]) - np.min(points[:,0]) +
-                    np.max(points[:,1]) - np.min(points[:,1])) / 2
-            bgr = head_pose.plot_axis(bgr, yaw, pitch, roll, cx=cx, cy=cy, size=int(round(size/3)))
+            bgr = head_pose.visual(bgr, radian, points)
         return bgr
 
     @staticmethod
@@ -229,7 +225,7 @@ class LibFunction:
             mode = kwargs.pop('mode', cv2.BORDER_CONSTANT)
             value = kwargs.pop('value', (255, 255, 255))
             param = dict(dsize=target_shape[::-1], flags=flags, borderMode=mode, borderValue=value)
-            warped = cv2.warpAffine(source, matrix, **param)
+            warped = cv2.warpAffine(cache_source.bgr, matrix, **param)
             return warped, matrix
 
     @staticmethod

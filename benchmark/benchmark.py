@@ -1,18 +1,13 @@
 
+import logging
 import os
 import numpy as np
 import cv2
 import sys
 sys.path.append('.')
 
-
-def configLogging():
-    import logging
-    format = '%(asctime)s - Lv%(levelno)s - %(filename)s:%(lineno)d - %(message)s'
-    logging.basicConfig(level=logging.INFO, format=format, datefmt='%Y-%m-%d %H:%M:%S')
-# config logging format
-configLogging()
-
+format = '%(asctime)s - Lv%(levelno)s - %(filename)s:%(lineno)d - %(message)s'
+logging.basicConfig(level=logging.INFO, format=format, datefmt='%Y-%m-%d %H:%M:%S')
 
 
 class Benchmark_Runtime:
@@ -55,12 +50,27 @@ class Benchmark_Thirdparty:
         XBody.benchmark_property()
 
 
+class Benchmark_Application:
+    @staticmethod
+    def benchmark_PortraitProtection():
+        # from core.application.libportraitprotection import LibPortraitProtection
+        # LibPortraitProtection.benchmark_doStyle()
+        # LibPortraitProtection.benchmark_doBlur()
+        # LibPortraitProtection.benchmark_doMosaic()
+        # from core.application.privacy.libportraitprotection_mosaic import LibPortraitProtection_Mosaic
+        # LibPortraitProtection_Mosaic.benchmark_doMosaic()
+        from core.application.privacy.libportraitprotection_blur import LibPortraitProtection_Blur
+        LibPortraitProtection_Blur.benchmark_doBlur()
+
+
 if __name__ == '__main__':
     # Benchmark_Runtime.benchmark_checkFiles()
 
     # Benchmark_Base.benchmark_XPortrait()
 
     # Benchmark_Thirdparty.benchmark_YoloX()
-    Benchmark_Thirdparty.benchmark_Sapiens()
+    # Benchmark_Thirdparty.benchmark_Sapiens()
     # Benchmark_Thirdparty.benchmark_RTMPose()
     # Benchmark_Thirdparty.benchmark_XBody()
+
+    Benchmark_Application.benchmark_PortraitProtection()
