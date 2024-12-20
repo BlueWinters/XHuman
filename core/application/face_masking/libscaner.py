@@ -19,12 +19,12 @@ from ... import XManager
 class PersonFrameInfo:
     index_frame: int
     box: np.ndarray  # 4:<int>
-    points: np.ndarray  # 5,2:<int>
+    # points: np.ndarray  # 5,2:<int>
 
     @staticmethod
     def fromString(string):
         info = [int(v) for v in string[1:-1].split(',')]
-        return PersonFrameInfo(index_frame=info[0], box=np.array(info[1:5], dtype=np.int32), points=np.zeros(shape=(5, 2), dtype=np.int32))
+        return PersonFrameInfo(index_frame=info[0], box=np.array(info[1:5], dtype=np.int32))
 
 
 class Person:
@@ -51,9 +51,9 @@ class Person:
     def setActivate(self, activate):
         self.activate = bool(activate)
 
-    def appendInfo(self, index_frame, box, points):
+    def appendInfo(self, index_frame, box):
         # TODO: interpolate frame info
-        self.frame_info_list.append(PersonFrameInfo(index_frame=index_frame, box=box, points=points))
+        self.frame_info_list.append(PersonFrameInfo(index_frame=index_frame, box=box))
 
     def getLastInfo(self) -> PersonFrameInfo:
         return self.frame_info_list[-1]
@@ -118,7 +118,7 @@ class VideoInfo:
             self.person_identity_history.append(person)
         self.person_list_current += person_list_new
 
-    def createNewPerson(self, index_frame, bgr, box, points):
+    def createNewPerson(self, index_frame, bgr, box):
         if self.isFixedNumber and self.person_identity_seq == self.person_fixed_num:
             if len(self.person_identity_history) > 0:
                 non_activate_index = [n for n, person in enumerate(self.person_identity_history) if person.activate is False]
@@ -133,13 +133,13 @@ class VideoInfo:
                         backtracking_iou = iou
                 person = self.person_identity_history.pop(backtracking_index)
                 person.setActivate(True)
-                person.appendInfo(index_frame, box, points)
+                person.appendInfo(index_frame, box)
                 return person
             return None
         # create person as common
         self.person_identity_seq += 1
         person = Person(self.person_identity_seq)
-        person.appendInfo(index_frame, box, points)
+        person.appendInfo(index_frame, box)
         person.setIdentityPreview(bgr, box)
         return person
 
@@ -322,20 +322,20 @@ class LibScaner:
             if iou_max_idx != -1 and (iou_max_val > LibScaner.IOU_Threshold or video_info.isFixedNumber):
                 person_cur = video_info.person_list_current.pop(iou_max_idx)
                 assert isinstance(person_cur, Person)
-                person_cur.appendInfo(index_frame, cur_one_box, cache.points[n, :, :])
+                person_cur.appendInfo(index_frame, cur_one_box)
                 person_list_new.append(person_cur)
             else:
                 # create a new person
-                person_new = video_info.createNewPerson(index_frame, cache.bgr, cur_one_box, cache.points[n, :, :])
+                person_new = video_info.createNewPerson(index_frame, cache.bgr, cur_one_box)
                 if person_new is None:
                     person_cur = video_info.person_list_current.pop(dis_min_idx)
                     assert isinstance(person_cur, Person)
-                    person_cur.appendInfo(index_frame, cur_one_box, cache.points[n, :, :])
+                    person_cur.appendInfo(index_frame, cur_one_box)
                     person_list_new.append(person_cur)
                 else:
                     person_list_new.append(person_new)
         # append all information
-        # video_info.addFrameInfo((np.copy(cache.box), np.copy(cache.points)))
+        # video_info.addFrameInfo((np.copy(cache.box)))
         # update current person list
         video_info.updatePersonList(person_list_new)
 
