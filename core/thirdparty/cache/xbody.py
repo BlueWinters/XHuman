@@ -25,19 +25,18 @@ class XBody(XCache):
     """
     @staticmethod
     def packageAsCache(source, **kwargs):
-        assert isinstance(source, (np.ndarray, XBody)), type(source)
-        cache = XBody(bgr=source, **kwargs) if isinstance(source, np.ndarray) else source
-        return cache
-
-    @staticmethod
-    def toCache(source, **kwargs):
         assert isinstance(source, (str, np.ndarray, XBody)), type(source)
         if isinstance(source, str):
             if source.endswith('pkl'):
-                source = XBody.load(source, verbose=False)
-            if source.endswith('png') or source.endswith('jpg'):
-                source = cv2.imread(source)
-        return XBody.packageAsCache(source, asserting=False)
+                return XBody.load(source, verbose=False)
+            if source.endswith('png') or source.endswith('jpg') or source.endswith('bmp'):
+                return XBody(bgr=cv2.imread(source), **kwargs)
+        if isinstance(source, np.ndarray):
+            assert len(source.shape) == 2 or (len(source.shape) == 3 and source.shape[2] == 3), source.shape
+            return XBody(bgr=source, **kwargs)
+        if isinstance(source, XBody):
+            return source
+        raise NotImplementedError(source)
 
     """
     global config
@@ -134,8 +133,8 @@ class XBody(XCache):
             # XPortraitExceptionAssert.assertNoFace(len(scores))
             pass
         self._number = len(scores)
-        self._scores = np.reshape(scores.astype(np.float32), (-1,))
-        self._boxes = np.reshape(np.round(boxes).astype(np.int32), (-1, 4,))
+        self._score = np.reshape(scores.astype(np.float32), (-1,))
+        self._box = np.reshape(np.round(boxes).astype(np.int32), (-1, 4,))
 
     @property
     def number(self):
@@ -145,15 +144,15 @@ class XBody(XCache):
 
     @property
     def score(self):
-        if not hasattr(self, '_scores'):
+        if not hasattr(self, '_score'):
             self._detectBoxes(self.bgr)
-        return self._scores
+        return self._score
 
     @property
     def box(self):
-        if not hasattr(self, '_boxes'):
+        if not hasattr(self, '_box'):
             self._detectBoxes(self.bgr)
-        return self._boxes
+        return self._box
 
     def _detectPose(self):
         points26, scores26 = self._getModule('rtmpose')(self.bgr, boxes=self.box)
