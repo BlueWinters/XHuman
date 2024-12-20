@@ -17,7 +17,7 @@ class XBody(XCache):
     def benchmark_property():
         bgr = cv2.imread('benchmark/asset/xbody/test.png')
         xcache = XBody(bgr)  # , url='http://192.168.130.17:8089/api/'
-        print(xcache.number, xcache.scores, xcache.boxes)
+        print(xcache.number, xcache.score, xcache.box)
         print(xcache.points26, xcache.scores26)
         # cv2.imwrite('benchmark/asset/xbody/xbody_segmentation.png', xcache.segmentation)
 
@@ -144,19 +144,19 @@ class XBody(XCache):
         return self._number
 
     @property
-    def scores(self):
+    def score(self):
         if not hasattr(self, '_scores'):
             self._detectBoxes(self.bgr)
         return self._scores
 
     @property
-    def boxes(self):
+    def box(self):
         if not hasattr(self, '_boxes'):
             self._detectBoxes(self.bgr)
         return self._boxes
 
     def _detectPose(self):
-        points26, scores26 = self._getModule('rtmpose')(self.bgr, boxes=self.boxes)
+        points26, scores26 = self._getModule('rtmpose')(self.bgr, boxes=self.box)
         self._points26 = np.reshape(np.array(points26, dtype=np.int32), (-1, 26, 2))
         self._scores26 = np.reshape(np.array(scores26, dtype=np.float32), (-1, 26))
 
@@ -184,7 +184,7 @@ class XBody(XCache):
     def visual_boxes(self):
         if not hasattr(self, '_visual_boxes'):
             module = self._getModule('rtmpose')
-            self._visual_boxes = module.visualBoxes(np.copy(self.bgr), self.boxes)
+            self._visual_boxes = module.visualBoxes(np.copy(self.bgr), self.box)
         return self._visual_boxes
 
     """
