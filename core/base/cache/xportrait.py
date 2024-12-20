@@ -58,7 +58,6 @@ class XPortrait(XCache):
 
     """
     """
-
     def __init__(self, bgr, **kwargs):
         super(XPortrait, self).__init__(bgr=bgr)
         self.url = kwargs.pop('url', '127.0.0.0')

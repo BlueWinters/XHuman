@@ -377,7 +377,7 @@ class LibScaner:
     @staticmethod
     def visualSingleFrame(bgr, video_info):
         canvas = np.copy(bgr)
-        for person in video_info.person_list_current:
+        for person in video_info.person_identity_history:
             canvas = LibScaner.visualSinglePerson(canvas, person.getLastInfo(), person.identity)
         return canvas
 

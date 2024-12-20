@@ -155,7 +155,7 @@ class LibMasking:
     """
     """
     @staticmethod
-    def getFixedNumFromImage(cache:XPortrait, max_num):
+    def getFixedNumFromImage(cache: XPortrait, max_num):
         assert isinstance(max_num, int)
         return max_num if max_num > 0 else cache.number
 
@@ -163,7 +163,7 @@ class LibMasking:
     def scanningImage(path_image_or_bgr, path_out_json, **kwargs) -> typing.Tuple[VideoInfo, typing.Union[np.ndarray, None]]:
         cache = XPortrait.packageAsCache(path_image_or_bgr)
         path_out_json = path_out_json or Resource.createRandomCacheFileName('.json')
-        max_num = LibMasking.getFixedNumFromImage(path_image_or_bgr, kwargs.pop('max_num', -1))
+        max_num = LibMasking.getFixedNumFromImage(cache, kwargs.pop('max_num', -1))
         video_info = LibScaner.inference([cache], path_out_json=path_out_json, fixed_num=max_num)
         visual_bgr = LibScaner.visualSingleFrame(cache.bgr, video_info) if bool(kwargs.pop('visual_scanning', False)) else None
         return video_info, visual_bgr
