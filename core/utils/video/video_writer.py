@@ -110,7 +110,7 @@ class XVideoWriter:
             self.path_source = copy.copy(path)
             self.path = copy.copy(path)  # the final path for writing
             if XVideoWriter.isForceDefaultFormat:
-                self.path = '{}{}'.format(os.path.splitext(self.path), XVideoWriter.default_suffix())
+                self.path = '{}{}'.format(os.path.splitext(self.path)[0], XVideoWriter.default_suffix())
                 self.fourcc = self.default_fourcc()
             if self.h != -1 and self.w != -1:
                 _ = self.writer  # to initialize, get a writer handle
