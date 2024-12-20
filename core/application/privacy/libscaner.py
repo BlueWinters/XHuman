@@ -267,19 +267,8 @@ class LibScaner:
     """
     """
     @staticmethod
-    def toCache(source) -> typing.Union[XBody, XPortrait]:
-        return XPortrait.toCache(source)
-        # assert isinstance(source, (np.ndarray, str, XBody, XPortrait))
-        # if isinstance(source, XPortrait):
-        #     return source
-        # if isinstance(source, str):
-        #     if source.endswith('pkl'):
-        #         return XPortrait.load(source, verbose=False)
-        #     if source.endswith('png') or source.endswith('jpg'):
-        #         source = cv2.imread(source)
-        # if isinstance(source, np.ndarray):
-        #     return XPortrait.packageAsCache(source, asserting=False)
-        # raise NotImplementedError(source)
+    def packageAsCache(source) -> typing.Union[XBody, XPortrait]:
+        return XPortrait.packageAsCache(source)
 
     @staticmethod
     def toNdarray(source):
@@ -355,7 +344,7 @@ class LibScaner:
                 video_info = VideoInfo(fixed_num=fixed_num)
                 for n, source in enumerate(reader_iterator):
                     if n % sample_step == 0:
-                        cache = LibScaner.toCache(source)
+                        cache = LibScaner.packageAsCache(source)
                         LibScaner.updateCommon(n, cache, video_info)
                     bar.update(1)
                 video_info.updatePersonList([])  # end the update

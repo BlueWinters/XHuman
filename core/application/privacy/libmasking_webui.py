@@ -107,7 +107,7 @@ class LibMaskingWebUI:
         uuid_name, (path_uuid, path_out_json, path_out_image) = Resource.createRandomCacheFileName(['', '.json', '.png'])
         bgr = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
         cv2.imwrite(path_out_image, bgr)
-        video_info, visual_bgr = LibMasking.scanningImage(bgr, path_out_json, max_num=max_num, visual_scanning=True)
+        video_info, visual_bgr = LibMasking.scanningImage(bgr, path_out_json, max_num=int(max_num), visual_scanning=True)
         return path_uuid, visual_bgr[:, :, ::-1], video_info.getInfoJson(False), video_info.getIdentityPreviewList(is_bgr=False)
 
     @staticmethod

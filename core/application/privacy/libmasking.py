@@ -161,7 +161,7 @@ class LibMasking:
 
     @staticmethod
     def scanningImage(path_image_or_bgr, path_out_json, **kwargs) -> typing.Tuple[VideoInfo, typing.Union[np.ndarray, None]]:
-        cache = XPortrait.toCache(path_image_or_bgr)
+        cache = XPortrait.packageAsCache(path_image_or_bgr)
         path_out_json = path_out_json or Resource.createRandomCacheFileName('.json')
         max_num = LibMasking.getFixedNumFromImage(path_image_or_bgr, kwargs.pop('max_num', -1))
         video_info = LibScaner.inference([cache], path_out_json=path_out_json, fixed_num=max_num)

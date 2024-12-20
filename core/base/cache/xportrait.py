@@ -38,19 +38,18 @@ class XPortrait(XCache):
 
     @staticmethod
     def packageAsCache(source, **kwargs):
-        assert isinstance(source, (np.ndarray, XPortrait)), type(source)
-        cache = XPortrait(bgr=source, **kwargs) if isinstance(source, np.ndarray) else source
-        return cache
-
-    @staticmethod
-    def toCache(source, **kwargs):
         assert isinstance(source, (str, np.ndarray, XPortrait)), type(source)
         if isinstance(source, str):
             if source.endswith('pkl'):
-                source = XPortrait.load(source, verbose=False)
-            if source.endswith('png') or source.endswith('jpg'):
-                source = cv2.imread(source)
-        return XPortrait.packageAsCache(source, asserting=False)
+                return XPortrait.load(source, verbose=False)
+            if source.endswith('png') or source.endswith('jpg') or source.endswith('bmp'):
+                return XPortrait(bgr=cv2.imread(source), **kwargs)
+        if isinstance(source, np.ndarray):
+            assert len(source.shape) == 2 or (len(source.shape) == 3 and source.shape[2] == 3), source.shape
+            return XPortrait(bgr=source, **kwargs)
+        if isinstance(source, XPortrait):
+            return source
+        raise NotImplementedError(source)
 
     """
     global config
