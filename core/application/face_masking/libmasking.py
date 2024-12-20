@@ -1,6 +1,7 @@
 
 import logging
 import os
+import random
 import typing
 import cv2
 import numpy as np
@@ -52,7 +53,7 @@ class MaskingOption:
     def getRandomMaskingOptionDict(person_list):
         options_dict = dict()
         for n, person in enumerate(person_list):
-            code = int(n % 3)
+            code = random.choice([0, 1, 2])
             options_dict[person.identity] = MaskingOption.package(code)
         return options_dict
 
@@ -89,6 +90,12 @@ class LibMasking:
 
     def initialize(self, *args, **kwargs):
         pass
+
+    """
+    """
+    @staticmethod
+    def getMaskingOption(option_code, parameters):
+        return MaskingOption(option_code, parameters)
 
     """
     """

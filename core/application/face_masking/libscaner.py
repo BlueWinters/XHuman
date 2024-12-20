@@ -155,8 +155,12 @@ class VideoInfo:
             format_list = [person.getInfoDict(with_frame_info) for person in self.getSortedHistory()]
             json.dump(format_list, file, indent=4)
 
-    def getIdentityPreviewDict(self, size=256):
-        return {person.identity: cv2.resize(person.preview, (size, size)) for person in self.getSortedHistory()}
+    def getIdentityPreviewDict(self, size=256, is_bgr=True):
+        def transform(bgr):
+            resized = cv2.resize(bgr, (size, size))
+            return resized if is_bgr is True else cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
+
+        return {person.identity: transform(person.preview) for person in self.getSortedHistory()}
 
     def getIdentityPreviewList(self, size=256, is_bgr=True):
         def transform(bgr):
