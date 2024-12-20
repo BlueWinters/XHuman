@@ -1,10 +1,13 @@
-
+import copy
 import os
 import logging
 import cv2
 import numpy as np
 import tempfile
-import queue, threading
+import platform
+import queue
+import threading
+import subprocess
 from typing import List
 
 
@@ -13,9 +16,28 @@ class XVideoWriter:
     """
     """
     @staticmethod
+    def reformatVideo(path_video_source, path_video_target):
+        if platform.system().lower() == 'linux':
+            # example: ffmpeg -i source.avi -c:v copy -c:a copy target.mp4
+            command = ['ffmpeg', '-i', path_video_source, '-codec:v', 'libx264', '-codec:a', 'aac', path_video_target]
+            subprocess.run(command)
+            logging.warning('finish reformat with ffmpeg: {}'.format(command))
+        else:
+            logging.warning('only linux system support ffmpeg')
+
+    @staticmethod
+    def reformatVideoTo(path_video_source, suffix='.mp4'):
+        path_video_target = '{}{}'.format(os.path.splitext(path_video_source), suffix)
+        XVideoWriter.reformatVideo(path_video_source, path_video_target)
+        return path_video_target
+
+    @staticmethod
     def default_fourcc():
-        return 'm', 'p', '4', 'v'
-        # return ('a', 'v', 'c', '1')
+        return 'X', 'V', 'I', 'D'
+
+    @staticmethod
+    def default_suffix():
+        return '.avi'
 
     @staticmethod
     def default_FPS():
@@ -23,13 +45,23 @@ class XVideoWriter:
 
     """
     """
-    def __init__(self, config:dict):
+    ConfigForceDefaultFormat = True
+
+    @property
+    def isForceDefaultFormat(self):
+        if platform.system().lower() == 'windows':
+            return False
+        return XVideoWriter.ConfigForceDefaultFormat
+
+    """
+    """
+    def __init__(self, config: dict):
         self._config(config)
 
     def __del__(self):
         self.release()
 
-    def _config(self, config:dict):
+    def _config(self, config: dict):
         self.fps = config['fps'] if 'fps' in config \
             else XVideoWriter.default_FPS()
         self.fourcc = config['fourcc'] if 'fourcc' in config \
@@ -72,18 +104,24 @@ class XVideoWriter:
             self._handle = lambda bgr: self._writer.write(bgr)  # lambda function for writing
         return self._handle
 
-    def open(self, path:str):
+    def open(self, path: str):
         if hasattr(self, 'path') is False:
             assert os.path.exists(os.path.split(path)[0])
-            self.path = path
+            self.path_source = copy.copy(path)
+            self.path = copy.copy(path)  # the final path for writing
+            if XVideoWriter.isForceDefaultFormat:
+                self.path = '{}{}'.format(os.path.splitext(self.path), XVideoWriter.default_suffix())
+                self.fourcc = self.default_fourcc()
             if self.h != -1 and self.w != -1:
-                handle = self.writer  # get a writer handle
+                _ = self.writer  # to initialize, get a writer handle
         return self
 
-    def release(self):
+    def release(self, reformat=True):
         if hasattr(self, '_writer'):
             if isinstance(self._writer, cv2.VideoWriter) and self._writer.isOpened():
                 self._writer.release()
+                if self.path_source != self.path and reformat is True:
+                    self.reformatVideo(self.path, self.path_source)
                 return True
         return False
 

@@ -37,7 +37,7 @@ class Resource:
         return path_folder
 
     @staticmethod
-    def createRandomCacheFile(suffixes=''):
+    def createRandomCacheFileName(suffixes=''):
         path_folder_time = Resource.createTimeStampFolder()
         uuid_name = str(uuid.uuid4().hex)
         if isinstance(suffixes, str):

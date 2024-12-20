@@ -76,7 +76,7 @@ class LibMasking:
         video_info = LibScaner.inference(cache_iter, fixed_num=5, path_out_json=path_out_json)
         # video_info = VideoInfo.loadFromJson(path_out_json)
         options_dict = MaskingOption.getRandomMaskingOptionDict(video_info.person_identity_history)
-        LibMasking.masking(path_in_video, path_out_video, video_info, options_dict)
+        LibMasking.maskingVideo(path_in_video, path_out_video, video_info, options_dict)
 
     """
     """
@@ -93,7 +93,19 @@ class LibMasking:
     """
     """
     @staticmethod
-    def getFixedNum(path_in_video, fixed_num=-1, num_preview=1):
+    def maskingSingleFace(bgr, box, masking_option: MaskingOption):
+        if masking_option.option_code == MaskingOption.MaskingOption_Blur:
+            bgr = LibMasking_Blur.inferenceOnBox(bgr, box, masking_option.parameters)
+        if masking_option.option_code == MaskingOption.MaskingOption_Mosaic:
+            bgr = LibMasking_Mosaic.inferenceOnBox(bgr, box, masking_option.parameters)
+        if masking_option.option_code == MaskingOption.MaskingOption_Sticker:
+            bgr = LibMasking_Sticker.inferenceWithBox(bgr, box, masking_option.parameters)
+        return bgr
+
+    """
+    """
+    @staticmethod
+    def getFixedNumFromVideo(path_in_video, fixed_num=-1, num_preview=1):
         if fixed_num == -1:
             if 0 < num_preview <= 8:
                 reader = XVideoReader(path_in_video)
@@ -106,10 +118,10 @@ class LibMasking:
             return fixed_num
 
     @staticmethod
-    def scanning(path_in_video, path_out_json, **kwargs) -> VideoInfo:
+    def scanningVideo(path_in_video, path_out_json, **kwargs) -> VideoInfo:
         parameters = dict()
-        parameters['path_out_json'] = path_out_json or Resource.createRandomCacheFile('.json')
-        parameters['fixed_num'] = LibMasking.getFixedNum(path_in_video, kwargs.pop('fixed_num', -1), kwargs.pop('num_preview', -1))
+        parameters['path_out_json'] = path_out_json or Resource.createRandomCacheFileName('.json')
+        parameters['fixed_num'] = LibMasking.getFixedNumFromVideo(path_in_video, kwargs.pop('fixed_num', -1), kwargs.pop('num_preview', -1))
         parameters['sample_step'] = kwargs.pop('sample_step', 1)
         iterator = XPortraitHelper.getXPortraitIterator(path_video=path_in_video)
         video_info = LibScaner.inference(iterator, **parameters)
@@ -119,17 +131,7 @@ class LibMasking:
     """
     """
     @staticmethod
-    def maskingSingleFace(bgr, box, masking_option: MaskingOption):
-        if masking_option.option_code == MaskingOption.MaskingOption_Blur:
-            bgr = LibMasking_Blur.inferenceOnBox(bgr, box, masking_option.parameters)
-        if masking_option.option_code == MaskingOption.MaskingOption_Mosaic:
-            bgr = LibMasking_Mosaic.inferenceOnBox(bgr, box, masking_option.parameters)
-        if masking_option.option_code == MaskingOption.MaskingOption_Sticker:
-            bgr = LibMasking_Sticker.inferenceWithBox(bgr, box, masking_option.parameters)
-        return bgr
-
-    @staticmethod
-    def masking(path_in_video: str, path_in_json: str, options_dict: typing.Dict[int, MaskingOption], path_video_out: str):
+    def maskingVideo(path_in_video: str, path_in_json: str, options_dict: typing.Dict[int, MaskingOption], path_video_out: str):
         video_info = VideoInfo.loadFromJson(path_in_json)
         if len(options_dict) == 0:
             options_dict = MaskingOption.getRandomMaskingOptionDict(video_info.person_identity_history)
@@ -148,5 +150,33 @@ class LibMasking:
                 except IndexError as e:
                     pass
             writer.write(bgr)
-        writer.release()
+        writer.release(reformat=True)
 
+    """
+    """
+    @staticmethod
+    def getFixedNumFromImage(cache:XPortrait, max_num):
+        assert isinstance(max_num, int)
+        return max_num if max_num > 0 else cache.number
+
+    @staticmethod
+    def scanningImage(path_image_or_bgr, path_out_json, **kwargs) -> typing.Tuple[VideoInfo, typing.Union[np.ndarray, None]]:
+        cache = XPortrait.toCache(path_image_or_bgr)
+        path_out_json = path_out_json or Resource.createRandomCacheFileName('.json')
+        max_num = LibMasking.getFixedNumFromImage(path_image_or_bgr, kwargs.pop('max_num', -1))
+        video_info = LibScaner.inference([cache], path_out_json=path_out_json, fixed_num=max_num)
+        visual_bgr = LibScaner.visualSingleFrame(cache.bgr, video_info) if bool(kwargs.pop('visual_scanning', False)) else None
+        return video_info, visual_bgr
+
+    @staticmethod
+    def maskingImage(path_image_or_bgr: str, path_in_json: str, options_dict: typing.Dict[int, MaskingOption]) -> np.ndarray:
+        video_info = VideoInfo.loadFromJson(path_in_json)
+        if len(options_dict) == 0:
+            options_dict = MaskingOption.getRandomMaskingOptionDict(video_info.person_identity_history)
+        iterator_list = [(person, person.getInfoIterator()) for person in video_info.person_identity_history]
+        bgr = cv2.imread(path_image_or_bgr) if isinstance(path_image_or_bgr, str) else np.array(path_image_or_bgr, dtype=np.uint8)
+        for _, (person, it) in enumerate(iterator_list):
+            info: PersonFrameInfo = it.next()
+            masking_option = options_dict[person.identity]
+            bgr = LibMasking.maskingSingleFace(bgr, info.box, masking_option)
+        return bgr

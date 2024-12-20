@@ -4,9 +4,9 @@ import logging
 import cv2
 import numpy as np
 import tqdm
+import platform
 from .video_reader import *
 from .video_writer import *
-
 
 
 class XVideoHelper:
@@ -214,3 +214,5 @@ class XVideoHelper:
             for bgr in reader:
                 writer.write(cv2.resize(bgr, (w, h)))
                 bar.update(1)
+
+

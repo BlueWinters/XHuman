@@ -410,7 +410,7 @@ class LibScaner:
                     except IndexError as e:
                         pass
                 writer.write(canvas)
-            writer.release()
+            writer.release(reformat=True)
 
     """
     independent interface
