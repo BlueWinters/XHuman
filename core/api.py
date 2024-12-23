@@ -81,10 +81,11 @@ def getResultsFromFunctions(name, function, *args, **kwargs):
         >>> import cv2, random, numpy
         >>> # 1.获取人脸数量和人脸的小头像
         >>> bgr_input = cv2.imread('path_to_image', cv2.IMREAD_COLOR)
-        >>> path_out_json = 'path_to_cache_json'
+        >>> # path_out_json = 'path_to_cache_json'
         >>> options_for_scanning_image = dict(max_num=-1)  # max_num表示最大人脸数量
-        >>> video_info, _ = getResultsFromFunctions('face_masking', 'scanningImage', bgr_input, path_out_json, **options_for_scanning_image)
+        >>> video_info, _ = getResultsFromFunctions('face_masking', 'scanningImage', bgr_input, **options_for_scanning_image)
         >>> preview_dict = video_info.getIdentityPreviewDict(size=256, is_bgr=True)  # 返回dict，key是人脸id(int)，value是一张人脸图片(array)，即{int: np.ndarray}
+        >>> vido_info_string_to_save = video_info.getInfoJson(True)  # 返回中间信息(str)用于保存
         >>> # 2.交互获得用户打码选择
         >>> masking_options_dict = dict()
         >>> blur_options = (0, 15)  # 15是表示模糊核大小，越大模糊程度越严重，越大速度越慢
@@ -95,20 +96,22 @@ def getResultsFromFunctions(name, function, *args, **kwargs):
         >>>     code, parameters = options
         >>>     masking_options_dict[identity] = getResultsFromFunctions('face_masking', 'getMaskingOption', code, parameters)
         >>> # 3.获得结果
-        >>> bgr_output:numpy.ndarray = getResultsFromFunctions('face_masking', 'maskingImage', bgr_input, path_out_json, masking_options_dict)
+        >>> video_info_string = vido_info_string_to_save  # 加载vido_info_string_to_save保存的信息
+        >>> bgr_output:numpy.ndarray = getResultsFromFunctions('face_masking', 'maskingImage', bgr_input, masking_options_dict, video_info_string=video_info_string)
     - App算法：视频人脸打码
         >>> # 1.获取人脸数量和人脸的小头像
         >>> path_video_input = 'path_video_input'
-        >>> path_out_json = 'path_to_cache_json'
         >>> options_for_scanning_video = dict()
         >>> options_for_scanning_video['fixed_num'] = 5  # fixed_num表示固定最大人脸数量
         >>> options_for_scanning_video['num_preview'] = 1  # num_preview针对fixed_num等于-1时候，通过预览1帧来确定fixed_num；0<num_previe<=8
         >>> video_info = getResultsFromFunctions('face_masking', 'scanningVideo', path_video_input, path_out_json, **options_for_scanning_image)
         >>> preview_dict = video_info.getIdentityPreviewDict(size=256, is_bgr=True)  # 返回dict，key是人脸id(int)，value是一张人脸图片(array)，即{int: np.ndarray}
+        >>> vido_info_string_to_save = video_info.getInfoJson(True)  # 返回中间信息(str)用于保存
         >>> # 2.交互获得用户打码选择（方法同上）
         >>> # 3.获得结果
         >>> path_video_out = 'path_video_out'
-        >>> getResultsFromFunctions('face_masking', 'maskingVideo', bgr_input, path_out_json, masking_options_dict, path_video_out)
+        >>> video_info_string = vido_info_string_to_save  # 加载vido_info_string_to_save保存的信息
+        >>> getResultsFromFunctions('face_masking', 'maskingVideo', bgr_input, masking_options_dict, path_video_out, video_info_string=video_info_string)
     """
 
     configLogging()

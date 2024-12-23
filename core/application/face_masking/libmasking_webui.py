@@ -22,7 +22,9 @@ class LibMaskingWebUI:
                 with gr.Row(equal_height=True):
                     video_input = gr.Video(label='input video', height=512)
                     with gr.Column():
-                        textbox_output_uuid = gr.Textbox(label='process uuid')
+                        with gr.Row():
+                            textbox_input_tracker = gr.Dropdown(['face', 'body'], value='face', label='tracker')
+                            textbox_output_uuid = gr.Textbox(label='process uuid')
                         with gr.TabItem('scanning video'):
                             video_output_scanning = gr.Video()
                         with gr.TabItem('scanning json'):
@@ -38,9 +40,11 @@ class LibMaskingWebUI:
                     button_scanning = gr.Button('Scanning')
                     button_masking = gr.Button('Masking')
 
+        textbox_input_tracker.change(lambda choice: LibScaner.setCacheType(choice))
+
         button_scanning.click(
             fn=LibMaskingWebUI.interfaceVideo_Scanning,
-            inputs=[video_input, num_preview, fix_num],
+            inputs=[video_input, textbox_input_tracker, num_preview, fix_num],
             outputs=[textbox_output_uuid, video_output_scanning, textarea_output_json, gallery_face],
         )
 
@@ -51,12 +55,12 @@ class LibMaskingWebUI:
         )
 
     @staticmethod
-    def interfaceVideo_Scanning(path_video, num_preview, fix_num):
+    def interfaceVideo_Scanning(path_video, tracker_name, num_preview, fix_num):
         uuid_name, (path_uuid, path_out_json, path_in_video, path_out_video) = Resource.createRandomCacheFileName(
             ['', '.json', '-in.mp4', '-out_scan.mp4'])
         shutil.copyfile(path_video, path_in_video)
-        parameters = dict(path_out_video=path_out_video, num_preview=int(num_preview), fix_num=int(fix_num))
-        video_info = LibMasking.scanningVideo(path_in_video, path_out_json, **parameters)
+        parameters = dict(tracker_name=tracker_name, path_out_video=path_out_video, num_preview=int(num_preview), fix_num=int(fix_num))
+        video_info = LibMasking.scanningVideo(path_in_video, path_out_json=path_out_json, **parameters)
         return path_uuid, path_out_video, video_info.getInfoJson(False), video_info.getIdentityPreviewList(is_bgr=False)
 
     @staticmethod
@@ -64,7 +68,7 @@ class LibMaskingWebUI:
         path_in_video = '{}-in.mp4'.format(path_uuid)
         path_in_json = '{}.json'.format(path_uuid)
         path_out_video = '{}-out_mask.mp4'.format(path_uuid)
-        LibMasking.maskingVideo(path_in_video, path_in_json, dict(), path_out_video)
+        LibMasking.maskingVideo(path_in_video, dict(), path_out_video, path_in_json=path_in_json)
         return path_out_video
 
     """
@@ -76,7 +80,9 @@ class LibMaskingWebUI:
                 with gr.Row(equal_height=True):
                     image_input = gr.Image(label='input image', height=512)
                     with gr.Column():
-                        textbox_output_uuid = gr.Textbox(label='process uuid')
+                        with gr.Row():
+                            textbox_input_tracker = gr.Dropdown(['face', 'body'], value='face', label='tracker')
+                            textbox_output_uuid = gr.Textbox(label='process uuid')
                         with gr.TabItem('scanning image'):
                             image_output_scanning = gr.Image()
                         with gr.TabItem('scanning json'):
@@ -89,6 +95,8 @@ class LibMaskingWebUI:
                 with gr.Row():
                     button_scanning = gr.Button('Scanning')
                     button_masking = gr.Button('Masking')
+
+        textbox_input_tracker.change(lambda choice: LibScaner.setCacheType(choice))
 
         button_scanning.click(
             fn=LibMaskingWebUI.interfaceImage_Scanning,
@@ -107,13 +115,13 @@ class LibMaskingWebUI:
         uuid_name, (path_uuid, path_out_json, path_out_image) = Resource.createRandomCacheFileName(['', '.json', '.png'])
         bgr = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
         cv2.imwrite(path_out_image, bgr)
-        video_info, visual_bgr = LibMasking.scanningImage(bgr, path_out_json, max_num=int(max_num), visual_scanning=True)
+        video_info, visual_bgr = LibMasking.scanningImage(bgr, path_out_json=path_out_json, max_num=int(max_num), visual_scanning=True)
         return path_uuid, visual_bgr[:, :, ::-1], video_info.getInfoJson(False), video_info.getIdentityPreviewList(is_bgr=False)
 
     @staticmethod
     def interfaceImage_Masking(path_uuid):
         path_in_image = '{}.png'.format(path_uuid)
         path_in_json = '{}.json'.format(path_uuid)
-        bgr = LibMasking.maskingImage(path_in_image, path_in_json, dict())
+        bgr = LibMasking.maskingImage(path_in_image, dict(), path_in_json=path_in_json)
         return cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
 

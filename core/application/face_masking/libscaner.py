@@ -8,7 +8,7 @@ import dataclasses
 import tqdm
 import json
 from ...base.cache import XPortrait, XPortraitHelper
-from ...thirdparty import XBody
+from ...thirdparty.cache import XBody, XBodyHelper
 from ...utils.context import XContextTimer
 from ...utils.video import XVideoReader, XVideoWriter
 from ...utils.color import Colors
@@ -146,7 +146,7 @@ class VideoInfo:
     def getSortedHistory(self):
         return sorted(self.person_identity_history, key=lambda person: person.identity)
 
-    def getInfoJson(self, with_frame_info):
+    def getInfoJson(self, with_frame_info) -> str:
         sorted_history = self.getSortedHistory()
         return json.dumps([person.getInfoDict(with_frame_info) for person in sorted_history], indent=4)
 
@@ -170,15 +170,16 @@ class VideoInfo:
         return [transform(person.preview) for person in self.getSortedHistory()]
 
     @staticmethod
-    def loadHistoryInfoFromJson(path_json):
-        with open(path_json, 'r') as file:
-            return [Person.loadFromDict(info) for info in json.load(file)]
-
-    @staticmethod
-    def loadFromJson(path_json):
-        video_info = VideoInfo()
-        video_info.person_identity_history = VideoInfo.loadHistoryInfoFromJson(path_json)
-        return video_info
+    def loadVideoInfo(**kwargs):
+        if 'path_in_json' in kwargs:
+            video_info = VideoInfo()
+            video_info.person_identity_history = [Person.loadFromDict(info) for info in json.load(open(kwargs['path_in_json'], 'r'))]
+            return video_info
+        if 'video_info_string' in kwargs:
+            video_info = VideoInfo()
+            video_info.person_identity_history = [Person.loadFromDict(info) for info in json.loads(kwargs['video_info_string'])]
+            return video_info
+        raise NotImplementedError('both "path_in_json" and "path_in_json" not in kwargs')
 
 
 class XRectangle:
@@ -256,6 +257,8 @@ class LibScaner:
     """
     """
     IOU_Threshold = 0.3
+    CacheType = XPortrait
+    CacheHelper = XPortraitHelper
 
     """
     """
@@ -271,8 +274,22 @@ class LibScaner:
     """
     """
     @staticmethod
+    def setCacheType(cache_type):
+        assert cache_type == 'face' or cache_type == 'body', cache_type
+        if cache_type == 'face':
+            LibScaner.CacheType = XPortrait
+            LibScaner.CacheHelper = XPortraitHelper
+        if cache_type == 'body':
+            LibScaner.CacheType = XBody
+            LibScaner.CacheHelper = XBodyHelper
+
+    @staticmethod
     def packageAsCache(source) -> typing.Union[XBody, XPortrait]:
-        return XPortrait.packageAsCache(source)
+        return LibScaner.CacheType.packageAsCache(source)
+
+    @staticmethod
+    def getCacheIterator(**kwargs):
+        return LibScaner.CacheHelper.getXPortraitIterator(**kwargs)
 
     @staticmethod
     def toNdarray(source):
@@ -340,6 +357,10 @@ class LibScaner:
         video_info.updatePersonList(person_list_new)
 
     @staticmethod
+    def updateWithYOLO():
+        pass
+
+    @staticmethod
     def inference(reader_iterator, **kwargs) -> VideoInfo:
         with XContextTimer(True) as context:
             with tqdm.tqdm(total=len(reader_iterator)) as bar:
@@ -353,7 +374,7 @@ class LibScaner:
                     bar.update(1)
                 video_info.updatePersonList([])  # end the update
                 # print(video_info.getInfoJson())
-                if 'path_out_json' in kwargs:
+                if 'path_out_json' in kwargs and isinstance(kwargs['path_out_json'], str):
                     video_info.dumpInfoToJson(kwargs['path_out_json'])
                 return video_info
 

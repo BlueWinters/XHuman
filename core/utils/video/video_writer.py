@@ -27,7 +27,7 @@ class XVideoWriter:
 
     @staticmethod
     def reformatVideoTo(path_video_source, suffix='.mp4'):
-        path_video_target = '{}{}'.format(os.path.splitext(path_video_source), suffix)
+        path_video_target = '{}{}'.format(os.path.splitext(path_video_source)[0], suffix)
         XVideoWriter.reformatVideo(path_video_source, path_video_target)
         return path_video_target
 
