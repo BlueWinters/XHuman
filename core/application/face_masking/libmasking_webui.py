@@ -40,7 +40,7 @@ class LibMaskingWebUI:
                     button_scanning = gr.Button('Scanning')
                     button_masking = gr.Button('Masking')
 
-        textbox_input_tracker.change(lambda choice: LibScaner.setCacheType(choice))
+        textbox_input_tracker.change(lambda choice: LibScaner.setCacheType(choice), inputs=[textbox_input_tracker])
 
         button_scanning.click(
             fn=LibMaskingWebUI.interfaceVideo_Scanning,
@@ -96,7 +96,7 @@ class LibMaskingWebUI:
                     button_scanning = gr.Button('Scanning')
                     button_masking = gr.Button('Masking')
 
-        textbox_input_tracker.change(lambda choice: LibScaner.setCacheType(choice))
+        textbox_input_tracker.change(lambda choice: LibScaner.setCacheType(choice), inputs=[textbox_input_tracker])
 
         button_scanning.click(
             fn=LibMaskingWebUI.interfaceImage_Scanning,
