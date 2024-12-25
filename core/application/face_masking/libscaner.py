@@ -258,7 +258,7 @@ class LibScaner:
     """
     IOU_Threshold = 0.3
     CacheType = XPortrait
-    CacheIteratorCreator = XPortraitHelper
+    CacheIteratorCreator = XPortraitHelper.getXPortraitIterator
 
     """
     """
