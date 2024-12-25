@@ -67,7 +67,7 @@ class XVideoReader:
             fourcc=self.fourcc,
             num_sec=self.num_sec
         )
-        if with_hw == True:
+        if with_hw is True:
             desc['h'] = self.h
             desc['w'] = self.w
         return desc

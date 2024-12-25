@@ -171,11 +171,11 @@ class VideoInfo:
 
     @staticmethod
     def loadVideoInfo(**kwargs):
-        if 'path_in_json' in kwargs:
+        if 'path_in_json' in kwargs and isinstance(kwargs['path_in_json'], str):
             video_info = VideoInfo()
             video_info.person_identity_history = [Person.loadFromDict(info) for info in json.load(open(kwargs['path_in_json'], 'r'))]
             return video_info
-        if 'video_info_string' in kwargs:
+        if 'video_info_string' in kwargs and isinstance(kwargs['video_info_string'], str):
             video_info = VideoInfo()
             video_info.person_identity_history = [Person.loadFromDict(info) for info in json.loads(kwargs['video_info_string'])]
             return video_info
@@ -258,7 +258,7 @@ class LibScaner:
     """
     IOU_Threshold = 0.3
     CacheType = XPortrait
-    CacheHelper = XPortraitHelper
+    CacheIteratorCreator = XPortraitHelper
 
     """
     """
@@ -278,10 +278,10 @@ class LibScaner:
         assert cache_type == 'face' or cache_type == 'body', cache_type
         if cache_type == 'face':
             LibScaner.CacheType = XPortrait
-            LibScaner.CacheHelper = XPortraitHelper
+            LibScaner.CacheIteratorCreator = XPortraitHelper.getXPortraitIterator
         if cache_type == 'body':
             LibScaner.CacheType = XBody
-            LibScaner.CacheHelper = XBodyHelper
+            LibScaner.CacheIteratorCreator = XBodyHelper.getXBodyIterator
 
     @staticmethod
     def packageAsCache(source) -> typing.Union[XBody, XPortrait]:
@@ -289,7 +289,7 @@ class LibScaner:
 
     @staticmethod
     def getCacheIterator(**kwargs):
-        return LibScaner.CacheHelper.getXPortraitIterator(**kwargs)
+        return LibScaner.CacheIteratorCreator(**kwargs)
 
     @staticmethod
     def toNdarray(source):
@@ -351,10 +351,11 @@ class LibScaner:
                     person_list_new.append(person_cur)
                 else:
                     person_list_new.append(person_new)
-        # append all information
-        # video_info.addFrameInfo((np.copy(cache.box)))
         # update current person list
         video_info.updatePersonList(person_list_new)
+        # set fixed number
+        if video_info.isFixedNumber is False and len(video_info.person_identity_history) > 0:
+            video_info.person_fixed_num = len(video_info.person_identity_history)
 
     @staticmethod
     def updateWithYOLO():

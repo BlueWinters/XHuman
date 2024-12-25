@@ -21,7 +21,7 @@ class XBodyHelper:
                 logging.warning('skip file: {}'.format(name))
 
     @staticmethod
-    def getXPortraitIterator(**kwargs):
+    def getXBodyIterator(**kwargs):
         if 'path_video' in kwargs:
             return XBodyIteratorVideo(kwargs['path_video'])
         if 'path_image' in kwargs:

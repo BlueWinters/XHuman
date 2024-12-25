@@ -11,7 +11,6 @@ import subprocess
 from typing import List
 
 
-
 class XVideoWriter:
     """
     """
