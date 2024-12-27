@@ -73,11 +73,39 @@ class LibMasking_Sticker:
 
     @staticmethod
     def inferenceWithBox(bgr, box, sticker):
-        lft, top, rig, bot = box
-        h = bot - top
-        w = rig - lft
-        bgr[top:bot, lft:rig, :] = cv2.resize(sticker, (w, h))
-        return bgr
+        if isinstance(sticker, np.ndarray):
+            lft, top, rig, bot = box
+            h = bot - top
+            w = rig - lft
+            bgr[top:bot, lft:rig, :] = cv2.resize(sticker, (w, h))
+            return bgr
+        if isinstance(sticker, dict):
+            sticker_image = sticker['bgr']
+            if 'eyes_center' in sticker:
+                ratio = 0.5
+                h, w, c = bgr.shape
+                lft, top, rig, bot = box
+                hh = bot - top
+                ww = rig - lft
+                lft = int(max(0, lft - ww * ratio))
+                top = int(max(0, top - hh * ratio))
+                rig = int(min(w, rig + ww * ratio))
+                bot = int(min(h, bot + hh * ratio))
+                dst_h, dst_w = bot - top, rig - lft
+                part = bgr[top:bot, lft:rig, :]
+                cache = XPortrait(part)
+                points_sticker = sticker['eyes_center']
+                points_source = cache.points[0, :2]
+                matrix = cv2.estimateAffinePartial2D(points_sticker, points_source, method=cv2.LMEDS)[0]
+                param = dict(dsize=(dst_w, dst_h), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT, borderValue=(255, 255, 255))
+                sticker_warped = cv2.warpAffine(sticker_image, matrix, **param)
+                sticker_warped_bgr, sticker_warped_alpha = sticker_warped[:, :, :3], sticker_warped[:, :, 3:4]
+                multi = sticker_warped_alpha.astype(np.float32) / 255.
+                fusion = part * (1 - multi) + sticker_warped_bgr * multi
+                fusion_bgr = np.round(fusion).astype(np.uint8)
+                bgr_copy = np.copy(bgr)
+                bgr_copy[top:bot, lft:rig, :] = fusion_bgr
+                return bgr_copy
 
     """
     """

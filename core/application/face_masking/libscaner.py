@@ -357,9 +357,59 @@ class LibScaner:
         if video_info.isFixedNumber is False and len(video_info.person_identity_history) > 0:
             video_info.person_fixed_num = len(video_info.person_identity_history)
 
+    """
+    """
     @staticmethod
-    def updateWithYOLO():
-        pass
+    def matchPrevious(person_list, identity):
+        for n, person in enumerate(person_list):
+            assert isinstance(person, Person)
+            if person.identity == identity:
+                return n
+        return -1
+
+    @staticmethod
+    def updateWithYOLO(index_frame, cache, video_info: VideoInfo):
+        module = XManager.getModules('ultralytics').getSpecific('yolo11n')
+        person_list_new = []
+        result = module.track(cache.bgr, persist=True, tracker='bytetrack.yaml')[0]
+        number = len(result)
+        # num_max = min(number, video_info.person_fixed_num) if video_info.isFixedNumber else number
+        cls = np.reshape(np.round(result.boxes.cls.numpy()).astype(np.int32), (-1,))
+        box = np.reshape(np.round(result.boxes.xyxy.numpy()).astype(np.int32), (-1, 4,))
+        score = np.reshape(result.boxes.conf.numpy().astype(np.float32), (-1,))
+        identity = np.reshape(result.boxes.id.numpy().astype(np.int32), (-1,))
+        for n in range(number):
+            cur_one_box = box[n, :]  # 4: lft,top,rig,bot
+            index = LibScaner.matchPrevious(video_info.person_list_current, int(identity[n]))
+            if cls[n] != 0:
+                continue  # only person id needed
+            if index != -1:
+                person_cur = video_info.person_list_current.pop(index)
+                assert isinstance(person_cur, Person)
+                person_cur.appendInfo(index_frame, cur_one_box)
+                person_list_new.append(person_cur)
+                continue
+            iou_max_idx, iou_max_val, dis_min_idx, dis_min_val = LibScaner.findBestMatch(video_info.person_list_current, cur_one_box)
+            if iou_max_idx != -1 and (iou_max_val > LibScaner.IOU_Threshold or video_info.isFixedNumber):
+                person_cur = video_info.person_list_current.pop(iou_max_idx)
+                assert isinstance(person_cur, Person)
+                person_cur.appendInfo(index_frame, cur_one_box)
+                person_list_new.append(person_cur)
+            else:
+                # create a new person
+                person_new = video_info.createNewPerson(index_frame, cache.bgr, cur_one_box)
+                if person_new is None:
+                    person_cur = video_info.person_list_current.pop(dis_min_idx)
+                    assert isinstance(person_cur, Person)
+                    person_cur.appendInfo(index_frame, cur_one_box)
+                    person_list_new.append(person_cur)
+                else:
+                    person_list_new.append(person_new)
+        # update current person list
+        video_info.updatePersonList(person_list_new)
+        # set fixed number
+        # if video_info.isFixedNumber is False and len(video_info.person_identity_history) > 0:
+        #     video_info.person_fixed_num = len(video_info.person_identity_history)
 
     @staticmethod
     def inference(reader_iterator, **kwargs) -> VideoInfo:
@@ -372,6 +422,7 @@ class LibScaner:
                     if n % sample_step == 0:
                         cache = LibScaner.packageAsCache(source)
                         LibScaner.updateCommon(n, cache, video_info)
+                        # LibScaner.updateWithYOLO(n, cache, video_info)
                     bar.update(1)
                 video_info.updatePersonList([])  # end the update
                 # print(video_info.getInfoJson())
@@ -435,11 +486,11 @@ class LibScaner:
     #     iterator = XPortraitHelper.getXPortraitIterator(path_image=path_in_image)
     #     video_info = LibScaner.inference(iterator, **kwargs)
     #     LibScaner.visualAllFrames(iterator, path_out_video, video_info)
-    #
-    # @staticmethod
-    # def inference_VideoToVideo(path_in_video, path_out_video, **kwargs):
-    #     iterator = XPortraitHelper.getXPortraitIterator(path_video=path_in_video)
-    #     video_info = LibScaner.inference(iterator, **kwargs)
-    #     LibScaner.visualAllFrames(iterator, path_out_video, video_info)
-    #     return video_info
+
+    @staticmethod
+    def inference_VideoToVideo(path_in_video, path_out_video, **kwargs):
+        iterator = LibScaner.getCacheIterator(path_video=path_in_video)
+        video_info = LibScaner.inference(iterator, **kwargs)
+        LibScaner.visualAllFrames(path_in_video, path_out_video, video_info)
+        return video_info
 

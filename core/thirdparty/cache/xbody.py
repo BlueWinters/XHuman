@@ -24,6 +24,11 @@ class XBody(XCache):
     """
     """
     @staticmethod
+    def setBackend(backend):
+        assert backend in ['rtmlib', 'ultralytics'], backend
+        XBody.Backend = backend
+
+    @staticmethod
     def packageAsCache(source, **kwargs):
         assert isinstance(source, (str, np.ndarray, XBody)), type(source)
         if isinstance(source, str):
@@ -43,6 +48,7 @@ class XBody(XCache):
     """
     PropertyReadOnly = True
     ThresholdVisualPoints26 = 0.3
+    Backend = 'rtmlib'
 
     """
     """
@@ -127,14 +133,21 @@ class XBody(XCache):
         raise NotImplementedError('no such sorting strategy: {}'.format(strategy))
 
     def _detectBoxes(self, bgr):
-        scores, boxes = self._getModule('human_detection_yolox')(bgr, targets='source')
-        scores, boxes = self._resort(self.strategy, scores, boxes)
-        if self.asserting is True:
-            # XPortraitExceptionAssert.assertNoFace(len(scores))
-            pass
-        self._number = len(scores)
-        self._score = np.reshape(scores.astype(np.float32), (-1,))
-        self._box = np.reshape(np.round(boxes).astype(np.int32), (-1, 4,))
+        if self.Backend == 'rtmlib':
+            scores, boxes = self._getModule('human_detection_yolox')(bgr, targets='source')
+            scores, boxes = self._resort(self.strategy, scores, boxes)
+            if self.asserting is True:
+                # XPortraitExceptionAssert.assertNoFace(len(scores))
+                pass
+            self._number = len(scores)
+            self._score = np.reshape(scores.astype(np.float32), (-1,))
+            self._box = np.reshape(np.round(boxes).astype(np.int32), (-1, 4,))
+        if self.Backend == 'ultralytics':
+            module = self._getModule('ultralytics').getSpecific('yolo11n')
+            result = module(bgr, persist=False)[0]
+            self._number = len(result)
+            self._score = np.reshape(result.boxes.conf.numpy().astype(np.float32), (-1,))
+            self._box = np.reshape(np.round(result.boxes.xyxy.numpy()).astype(np.int32), (-1, 4,))
 
     @property
     def number(self):
@@ -185,6 +198,29 @@ class XBody(XCache):
             module = self._getModule('rtmpose')
             self._visual_boxes = module.visualBoxes(np.copy(self.bgr), self.box)
         return self._visual_boxes
+
+    """
+    """
+    @property
+    def portrait_parsing(self):
+        if not hasattr(self, '_portrait_parsing'):
+            module = self._getModule('portrait_parsing')
+            h, w = self.shape
+            self._portrait_parsing = np.zeros(shape=(self.number, h, w), dtype=np.uint8)
+            for n in range(self.number):
+                lft, top, rig, bot = self.box[n, :]
+                self._portrait_parsing[n, top:bot, lft:rig] = module(self.bgr[top:bot, lft:rig, :])
+        return self._portrait_parsing
+
+    @property
+    def visual_portrait_parsing(self):
+        if not hasattr(self, '_visual_portrait_parsing'):
+            module = self._getModule('portrait_parsing')
+            h, w = self.shape
+            self._visual_portrait_parsing = np.zeros(shape=(self.number, h, w, 3), dtype=np.uint8)
+            for n in range(len(self.portrait_parsing)):
+                self._visual_portrait_parsing[n, :, :, :] = module.colorize(self.portrait_parsing[n, :, :])
+        return self._visual_portrait_parsing
 
     """
     """

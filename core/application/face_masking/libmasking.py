@@ -20,31 +20,47 @@ from ... import XManager
 class MaskingOption:
     """
     """
-    MaskingOption_Default = 0
-    MaskingOption_Blur = 0
-    MaskingOption_Mosaic = 1
-    MaskingOption_Sticker = 2
+    MaskingOption_Blur = [101, 102, 103, 104, 105]
+    MaskingOption_Mosaic = [201, 202]
+    MaskingOption_Sticker = [301]
 
     @staticmethod
-    def packageAsBlur(blur_kernel=15):
-        assert isinstance(blur_kernel, int)
-        return MaskingOption(MaskingOption.MaskingOption_Blur, blur_kernel)
+    def packageAsBlur():
+        seed = random.randint(0, 10) % 5
+        if seed == 0:
+            return MaskingOption(101, dict(blur_type='blur_gaussian', focus_type='head'))
+        if seed == 1:
+            return MaskingOption(102, dict(blur_type='blur_motion', focus_type='head'))
+        if seed == 2:
+            return MaskingOption(103, dict(blur_type='blur_water', focus_type='head'))
+        if seed == 3:
+            return MaskingOption(103, dict(blur_type='blur_pencil', focus_type='head'))
+        if seed == 4:
+            return MaskingOption(103, dict(blur_type='blur_diffuse', focus_type='head'))
 
     @staticmethod
-    def packageAsMosaic(num_pixel=5):
-        assert isinstance(num_pixel, int)
-        return MaskingOption(MaskingOption.MaskingOption_Mosaic, num_pixel)
+    def packageAsMosaic():
+        seed = random.randint(0, 10) % 2
+        if seed == 0:
+            return MaskingOption(201, dict(mosaic_type='mosaic_pixel_square', focus_type='head'))
+        if seed == 1:
+            return MaskingOption(202, dict(mosaic_type='mosaic_pixel_polygon', focus_type='head'))
 
     @staticmethod
-    def packageAsSticker(sticker_bgr=None):
-        if sticker_bgr is None:
-            path = '{}/cartoon/00.png'.format(os.path.split(__file__)[0])
+    def packageAsSticker():
+        seed = random.randint(0, 10) % 2
+        if seed == 0:
+            path = '{}/resource/sticker/cartoon/00.png'.format(os.path.split(__file__)[0])
             sticker_bgr = Resource.loadImage(path)
-        assert isinstance(sticker_bgr, np.ndarray)
-        return MaskingOption(MaskingOption.MaskingOption_Sticker, sticker_bgr)
+            return MaskingOption(301, sticker_bgr)
+        if seed == 1:
+            sticker = cv2.imread('{}/resource/sticker/retro/01.png'.format(os.path.split(__file__)[0]), cv2.IMREAD_UNCHANGED)
+            points = np.array([[88, 227], [190, 227]], dtype=np.int32)
+            return MaskingOption(301, dict(bgr=sticker, eyes_center=points))
 
     @staticmethod
-    def package(code):
+    def package():
+        code = random.choice([0, 2])
         return [MaskingOption.packageAsBlur,
                 MaskingOption.packageAsMosaic,
                 MaskingOption.packageAsSticker][code]()
@@ -53,8 +69,8 @@ class MaskingOption:
     def getRandomMaskingOptionDict(person_list):
         options_dict = dict()
         for n, person in enumerate(person_list):
-            code = random.choice([0, 1, 2])
-            options_dict[person.identity] = MaskingOption.package(code)
+            options_dict[person.identity] = MaskingOption.package()
+            print(person.identity, options_dict[person.identity].option_code)
         return options_dict
 
     """
@@ -63,21 +79,33 @@ class MaskingOption:
         self.option_code = option_code
         self.parameters = parameters
 
+    def __str__(self):
+        return '{} --> {}'.format(self.option_code, self.parameters)
+
 
 class LibMasking:
     """
     """
     @staticmethod
-    def benchmark():
-        path_in_video = R'N:\archive\2024\1126-video\DanceShow2\06\input-06.mp4'
-        path_out_video = R'N:\archive\2024\1126-video\DanceShow2\06\input-06-pro.mp4'
-        path_out_json = R'N:\archive\2024\1126-video\DanceShow2\06\input-06.json'
-        cache_iter = XPortraitHelper.getXPortraitIterator(path_video=path_in_video)
-        # video_info = LibMasking.scan(path_video_in)
-        video_info = LibScaner.inference(cache_iter, fixed_num=5, path_out_json=path_out_json)
-        # video_info = VideoInfo.loadFromJson(path_out_json)
+    def benchmarkOnImage():
+        path_in_image = R'N:\archive\2024\1126-video\image\input.png'
+        path_out_json = R'N:\archive\2024\1126-video\image\input.json'
+        path_out_image = R'N:\archive\2024\1126-video\image\output1.png'
+        LibMasking.scanningImage(path_in_image, path_out_json=path_out_json)
+        video_info = VideoInfo.loadVideoInfo(path_in_json=path_out_json)
         options_dict = MaskingOption.getRandomMaskingOptionDict(video_info.person_identity_history)
-        LibMasking.maskingVideo(path_in_video, path_out_video, video_info, options_dict)
+        result = LibMasking.maskingImage(path_in_image, options_dict, path_in_json=path_out_json)
+        cv2.imwrite(path_out_image, result)
+
+    @staticmethod
+    def benchmarkOnVideo():
+        path_in_video = R'N:\archive\2024\1126-video\DanceShow2\06\input-06.mp4'
+        path_out_json = R'N:\archive\2024\1126-video\DanceShow2\06\input-06.json'
+        path_out_video = R'N:\archive\2024\1126-video\DanceShow2\06\input-06-masking.mp4'
+        # LibMasking.scanningVideo(path_in_video, fixed_num=5, path_out_json=path_out_json)
+        video_info = VideoInfo.loadVideoInfo(path_in_json=path_out_json)
+        options_dict = MaskingOption.getRandomMaskingOptionDict(video_info.person_identity_history)
+        LibMasking.maskingVideo(path_in_video, options_dict, path_out_video, path_in_json=path_out_json)
 
     """
     """
@@ -101,13 +129,13 @@ class LibMasking:
     """
     @staticmethod
     def maskingSingleFace(bgr, box, masking_option: MaskingOption):
-        if masking_option.option_code == MaskingOption.MaskingOption_Blur:
-            bgr = LibMasking_Blur.inferenceOnBox(bgr, box, masking_option.parameters)
-        if masking_option.option_code == MaskingOption.MaskingOption_Mosaic:
-            bgr = LibMasking_Mosaic.inferenceOnBox(bgr, box, masking_option.parameters)
-        if masking_option.option_code == MaskingOption.MaskingOption_Sticker:
-            bgr = LibMasking_Sticker.inferenceWithBox(bgr, box, masking_option.parameters)
-        return bgr
+        if masking_option.option_code in MaskingOption.MaskingOption_Blur:
+            return LibMasking_Blur.inferenceWithBox(bgr, box, masking_option.parameters)
+        if masking_option.option_code in MaskingOption.MaskingOption_Mosaic:
+            return LibMasking_Mosaic.inferenceWithBox(bgr, box, masking_option.parameters)
+        if masking_option.option_code in MaskingOption.MaskingOption_Sticker:
+            return LibMasking_Sticker.inferenceWithBox(bgr, box, masking_option.parameters)
+        raise NotImplementedError(masking_option)
 
     """
     """
@@ -147,18 +175,21 @@ class LibMasking:
         writer = XVideoWriter(reader.desc(True))
         writer.open(path_video_out)
         iterator_list = [(person, person.getInfoIterator()) for person in video_info.person_identity_history]
-        for index_frame, bgr in enumerate(reader):
-            for _, (person, it) in enumerate(iterator_list):
-                try:
-                    info: PersonFrameInfo = it.next()
-                    if info.index_frame == index_frame:
-                        if person.identity in options_dict:
-                            masking_option = options_dict[person.identity]
-                            bgr = LibMasking.maskingSingleFace(bgr, info.box, masking_option)
-                        it.update()
-                except IndexError as e:
-                    pass
-            writer.write(bgr)
+        with XContextTimer(True):
+            with tqdm.tqdm(total=len(reader)) as bar:
+                for index_frame, bgr in enumerate(reader):
+                    for _, (person, it) in enumerate(iterator_list):
+                        try:
+                            info: PersonFrameInfo = it.next()
+                            if info.index_frame == index_frame:
+                                if person.identity in options_dict:
+                                    masking_option = options_dict[person.identity]
+                                    bgr = LibMasking.maskingSingleFace(bgr, info.box, masking_option)
+                                it.update()
+                        except IndexError as e:
+                            pass
+                    writer.write(bgr)
+                    bar.update(1)
         writer.release(reformat=True)
 
     """

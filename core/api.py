@@ -88,11 +88,24 @@ def getResultsFromFunctions(name, function, *args, **kwargs):
         >>> vido_info_string_to_save = video_info.getInfoJson(True)  # 返回中间信息(str)用于保存
         >>> # 2.交互获得用户打码选择
         >>> masking_options_dict = dict()
-        >>> blur_options = (0, 15)  # 15是表示模糊核大小，越大模糊程度越严重，越大速度越慢
-        >>> mosaic_options = (1, 7)  # 7是表示人脸的像素个数，越小模糊程度越严重，对速度影响不大
-        >>> sticker_options = (2, cv2.imread('path_to_sticker'))  # sticker贴纸素材
+        >>> # focus_type只能是head或者box，head表示只头部，box表示
+        >>> options_blur_gaussian = (101, dict(blur_type='blur_gaussian', focus_type='head'))  # 其他：blur_kernel=15是表示模糊核大小，越大模糊程度越严重，越大速度越慢
+        >>> options_blur_motion = (102, dict(blur_type='blur_motion', focus_type='head'))  # 其他：blur_kernel=15是表示模糊核大小，越大模糊程度越严重，越大速度越慢
+        >>> options_blur_water = (103, dict(blur_type='blur_water', focus_type='head'))  # 其他：rotation_degree=2表示水波纹旋转度，water_length=8表示水波纹的长度
+        >>> options_blur_pencil = (104, dict(blur_type='blur_pencil', focus_type='head'))  # 其他：k_neigh=17表示扩散程度, pre_k=3表示模糊度，post_k=3表示模糊度
+        >>> options_blur_diffuse = (105, dict(blur_type='blur_diffuse', focus_type='head'))  # 其他：k_neigh=17表示扩散程度
+        >>> options_mosaic_square = (201, dict(mosaic_type='mosaic_pixel_square', focus_type='head'))  # 其他：num_pixel=16表示像素个数，越小越模糊
+        >>> options_mosaic_polygon = (202, dict(mosaic_type='mosaic_pixel_polygon', focus_type='head'))  # 其他：n_div=16表示像素个数，越小越模糊，vis_boundary=False表示不显示边界线
+        >>> # options_mosaic_polygon一些特别的设置
+        >>> options_mosaic_polygon_small = (202, dict(mosaic_type='mosaic_pixel_polygon_small', focus_type='head'))  # 很少像素+没有边界线
+        >>> options_mosaic_polygon_small_line = (202, dict(mosaic_type='mosaic_pixel_polygon_small_line', focus_type='head'))  # 很少像素+有边界线
+        >>> options_mosaic_polygon_big = (202, dict(mosaic_type='mosaic_pixel_polygon_big', focus_type='head'))  # 较多像素+没有边界线
+        >>> options_mosaic_polygon_big_line = (202, dict(mosaic_type='mosaic_pixel_polygon_big_line', focus_type='head'))  # 较多像素+有边界线
+        >>> options_sticker_pure = (301, cv2.imread('path_to_sticker'))  # 纯粹的贴纸素材
+        >>> options_sticker_align = (301, dict(bgr=cv2.imread('path_to_sticker'), eyes_center=np.array(...)))  # 贴纸素材+对应的点
+        >>> # 给每个人随机赋一个打码类型
         >>> for identity in list(preview_dict.keys()):
-        >>>     options = random.choice([blur_options, mosaic_options, sticker_options])  # 根据用户选择一个
+        >>>     options = random.choice([options_blur_gaussian, options_mosaic_square, options_sticker_pure])  # 根据用户选择一个
         >>>     code, parameters = options
         >>>     masking_options_dict[identity] = getResultsFromFunctions('face_masking', 'getMaskingOption', code, parameters)
         >>> # 3.获得结果
