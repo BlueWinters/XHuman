@@ -152,8 +152,9 @@ class LibMasking:
                 try:
                     info: PersonFrameInfo = it.next()
                     if info.index_frame == index_frame:
-                        masking_option = options_dict[person.identity]
-                        bgr = LibMasking.maskingSingleFace(bgr, info.box, masking_option)
+                        if person.identity in options_dict:
+                            masking_option = options_dict[person.identity]
+                            bgr = LibMasking.maskingSingleFace(bgr, info.box, masking_option)
                         it.update()
                 except IndexError as e:
                     pass
@@ -186,6 +187,7 @@ class LibMasking:
         bgr = cv2.imread(path_image_or_bgr) if isinstance(path_image_or_bgr, str) else np.array(path_image_or_bgr, dtype=np.uint8)
         for _, (person, it) in enumerate(iterator_list):
             info: PersonFrameInfo = it.next()
-            masking_option = options_dict[person.identity]
-            bgr = LibMasking.maskingSingleFace(bgr, info.box, masking_option)
+            if person.identity in options_dict:
+                masking_option = options_dict[person.identity]
+                bgr = LibMasking.maskingSingleFace(bgr, info.box, masking_option)
         return bgr
