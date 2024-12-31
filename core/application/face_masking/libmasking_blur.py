@@ -8,8 +8,7 @@ import skimage
 import pickle
 import typing
 import tqdm
-from .face_helper import *
-from ...base import XPortrait
+from ...base import XPortrait, XPortraitHelper
 from ...utils.context import XContextTimer
 from ...utils.video import XVideoReader, XVideoWriter
 from ... import XManager
@@ -73,14 +72,10 @@ class LibMasking_Blur:
         resized = cv2.resize(bgr_cur[tp:bp, lp:rp, :], (src_w, src_h))
         return resized
 
+    """
+    """
     @staticmethod
     def doWithGaussianBlur(bgr, kernel=15, blur_size=256):
-        # if box is not None:
-        #     lft, top, rig, bot = box
-        #     size = max(bot - top, rig - lft)
-        #     kernel_max = int(size // 10)  # 5
-        #     kernel_min = int(size // 20)  # 1
-        #     kernel = int(kernel_min + (kernel_max - kernel_min) / 4 * value)
         format_bgr, padding = LibMasking_Blur.formatSizeWithPaddingForward(bgr, blur_size, blur_size)
         kernel = kernel if kernel % 2 == 1 else (kernel + 1)  # should be odd
         blured_bgr = cv2.GaussianBlur(format_bgr, (kernel, kernel), kernel // 2, kernel // 2)
@@ -89,12 +84,6 @@ class LibMasking_Blur:
 
     @staticmethod
     def doWithBlurMotion(bgr, kernel=15, blur_size=256):
-        # if box is not None:
-        #     lft, top, rig, bot = box
-        #     size = max(bot - top, rig - lft)
-        #     kernel_max = int(size // 10)  # 5
-        #     kernel_min = int(size // 20)  # 1
-        #     kernel = int(kernel_min + (kernel_max - kernel_min) / 4 * value)
         format_bgr, padding = LibMasking_Blur.formatSizeWithPaddingForward(bgr, blur_size, blur_size)
         kernel = kernel if kernel % 2 == 1 else (kernel + 1)  # should be odd
         c = int(kernel / 2)
@@ -162,31 +151,7 @@ class LibMasking_Blur:
     """
     """
     @staticmethod
-    def toCache(source):
-        assert isinstance(source, (np.ndarray, str, XPortrait))
-        if isinstance(source, str):
-            source = cv2.imread(source)
-        return XPortrait.packageAsCache(source, asserting=False)
-
-    @staticmethod
-    def getMask(cache, ratio=0.):
-        h, w = cache.shape
-        mask = np.ones(shape=cache.shape, dtype=np.uint8)
-        for n in range(len(cache.box)):
-            # lft, top, rig, bot = cache.box[n, :]
-            # if ratio > 0:
-            #     hh = bot - top
-            #     ww = rig - lft
-            #     lft = int(max(0, lft - ww * ratio))
-            #     top = int(max(0, top - hh * ratio))
-            #     rig = int(min(w, rig + ww * ratio))
-            #     bot = int(min(h, bot + hh * ratio))
-            # mask[top:bot, lft:rig] = 255
-            mask = LibMasking_Blur.getMaskFromBox(h, w, cache.box[n, :], ratio=ratio)
-        return mask
-
-    @staticmethod
-    def getMaskFromBox(h, w, box, ratio):
+    def getMaskFromBox(h, w, box, ratio, value=255):
         mask = np.ones(shape=(h, w), dtype=np.uint8)
         lft, top, rig, bot = box
         if ratio > 0:
@@ -196,8 +161,12 @@ class LibMasking_Blur:
             top = int(max(0, top - hh * ratio))
             rig = int(min(w, rig + ww * ratio))
             bot = int(min(h, bot + hh * ratio))
-        mask[top:bot, lft:rig] = 255
+        mask[top:bot, lft:rig] = value
         return mask
+
+    @staticmethod
+    def getFaceMaskByPoints(cache, n=0, top_line='brow', value=255):
+        return XPortraitHelper.getFaceRegion(cache, index=n, top_line=top_line, value=value)[n]
 
     @staticmethod
     def workOnSelected(source_bgr, blured_bgr, kernel=17, mask=None, **kwargs):
@@ -209,39 +178,27 @@ class LibMasking_Blur:
         return np.round(fusion).astype(np.uint8)
 
     @staticmethod
-    def inference(reader_iterator, writer_interator, **kwargs):
-        with tqdm.tqdm(total=len(reader_iterator)) as bar:
-            for n, source in enumerate(reader_iterator):
-                cache = LibMasking_Blur.toCache(source)
-                # blured_bgr = LibMasking_Blur.doWithGaussianBlur(cache.bgr)
-                blured_bgr = LibMasking_Blur.doWithBlurMotion(cache.bgr)
-                # blured_bgr = LibMasking_Blur.inferenceOnBoxWithBlurWater(cache.bgr)
-                canvas = LibMasking_Blur.workOnSelected(cache.bgr, blured_bgr, mask=LibMasking_Blur.getMask(cache))
-                writer_interator(canvas)
-                bar.update(1)
-
-    @staticmethod
     def inferenceWithBox(bgr, box, parameters):
         blur_type = parameters['blur_type']
         focus_type = parameters['focus_type']
         if blur_type == 'blur_gaussian':
             blur_kernel = parameters['blur_kernel'] if 'blur_kernel' in parameters else 15
-            return LibMasking_Blur.inferenceOnBox_WithBlurGaussian(bgr, box, blur_kernel, focus_type)
+            return LibMasking_Blur.inferenceOnBox_WithBlurGaussian(bgr, box, blur_kernel, focus_type=focus_type)
         if blur_type == 'blur_motion':
             blur_kernel = parameters['blur_kernel'] if 'blur_kernel' in parameters else 15
-            return LibMasking_Blur.inferenceOnBox_WithBlurMotion(bgr, box, blur_kernel, focus_type)
+            return LibMasking_Blur.inferenceOnBox_WithBlurMotion(bgr, box, blur_kernel, focus_type=focus_type)
         if blur_type == 'blur_water':
             rotation_degree = parameters['rotation_degree'] if 'rotation_degree' in parameters else 2
             water_length = parameters['water_length'] if 'water_length' in parameters else 8
-            return LibMasking_Blur.inferenceOnBox_WithBlurWater(bgr, box, rotation_degree, water_length, focus_type)
+            return LibMasking_Blur.inferenceOnBox_WithBlurWater(bgr, box, rotation_degree, water_length, focus_type=focus_type)
         if blur_type == 'blur_pencil':
             k_neigh = parameters['k_neigh'] if 'k_neigh' in parameters else 17
             pre_k = parameters['pre_k'] if 'pre_k' in parameters else 3
             post_k = parameters['post_k'] if 'post_k' in parameters else 3
-            return LibMasking_Blur.inferenceOnBox_WithBlurPencil(bgr, box, k_neigh, pre_k, post_k, focus_type)
+            return LibMasking_Blur.inferenceOnBox_WithBlurPencil(bgr, box, k_neigh, pre_k, post_k, focus_type=focus_type)
         if blur_type == 'blur_diffuse':
             k_neigh = parameters['k_neigh'] if 'k_neigh' in parameters else 17
-            return LibMasking_Blur.inferenceOnBox_WithBlurPencil(bgr, box, k_neigh, 0, 0, focus_type)
+            return LibMasking_Blur.inferenceOnBox_WithBlurPencil(bgr, box, k_neigh, 0, 0, focus_type=focus_type)
         raise NotImplementedError(parameters)
 
     @staticmethod
@@ -251,7 +208,7 @@ class LibMasking_Blur:
         if focus_type == 'head':
             lft, top, rig, bot = box
             mask = np.zeros(shape=(h, w), dtype=np.uint8)
-            mask[top:bot, lft:rig] = getFaceMaskByPoints(XPortrait(bgr[top:bot, lft:rig, :]))
+            mask[top:bot, lft:rig] = LibMasking_Blur.getFaceMaskByPoints(XPortrait(bgr[top:bot, lft:rig, :]))
         else:
             mask = LibMasking_Blur.getMaskFromBox(h, w, box, ratio=0.)
         return LibMasking_Blur.workOnSelected(bgr, blured_bgr, mask=mask)
@@ -263,23 +220,23 @@ class LibMasking_Blur:
         if focus_type == 'head':
             lft, top, rig, bot = box
             mask = np.zeros(shape=(h, w), dtype=np.uint8)
-            mask[top:bot, lft:rig] = getFaceMaskByPoints(XPortrait(bgr[top:bot, lft:rig, :]))
+            mask[top:bot, lft:rig] = LibMasking_Blur.getFaceMaskByPoints(XPortrait(bgr[top:bot, lft:rig, :]))
         else:
             mask = LibMasking_Blur.getMaskFromBox(h, w, box, ratio=0.)
         return LibMasking_Blur.workOnSelected(bgr, blured_bgr, mask=mask)
 
     @staticmethod
-    def inferenceOnBox_WithBlurWater(bgr, box, A, B, focus_type):
+    def inferenceOnBox_WithBlurWater(bgr, box, a, b, focus_type):
         h, w = bgr.shape[:2]
         lft, top, rig, bot = box
         if focus_type == 'head':
             mask = np.zeros(shape=(h, w), dtype=np.uint8)
-            mask[top:bot, lft:rig] = getFaceMaskByPoints(XPortrait(bgr[top:bot, lft:rig, :]))
+            mask[top:bot, lft:rig] = LibMasking_Blur.getFaceMaskByPoints(XPortrait(bgr[top:bot, lft:rig, :]))
         else:
             mask = LibMasking_Blur.getMaskFromBox(h, w, box, ratio=0.)
         part = bgr[top:bot, lft:rig, :]
         resized = cv2.resize(part, (256, 256))
-        blured_bgr = LibMasking_Blur.doWithBlurWater(resized, A, B)
+        blured_bgr = LibMasking_Blur.doWithBlurWater(resized, a, b)
         blured_bgr = cv2.resize(blured_bgr, part.shape[:2][::-1])
         copy_bgr = np.copy(bgr)
         copy_bgr[top:bot, lft:rig, :] = blured_bgr
@@ -292,13 +249,20 @@ class LibMasking_Blur:
         if focus_type == 'head':
             lft, top, rig, bot = box
             mask = np.zeros(shape=(h, w), dtype=np.uint8)
-            mask[top:bot, lft:rig] = getFaceMaskByPoints(XPortrait(bgr[top:bot, lft:rig, :]))
+            mask[top:bot, lft:rig] = LibMasking_Blur.getFaceMaskByPoints(XPortrait(bgr[top:bot, lft:rig, :]))
         else:
             mask = LibMasking_Blur.getMaskFromBox(h, w, box, ratio=0.)
         return LibMasking_Blur.workOnSelected(bgr, blured_bgr, mask=mask)
 
     """
     """
+    @staticmethod
+    def toCache(source):
+        assert isinstance(source, (np.ndarray, str, XPortrait))
+        if isinstance(source, str):
+            source = cv2.imread(source)
+        return XPortrait.packageAsCache(source, asserting=False)
+
     @staticmethod
     def blur_ImagesToImages(path_in, path_out):
         assert os.path.isdir(path_in), path_in
@@ -316,7 +280,7 @@ class LibMasking_Blur:
                         # canvas = LibMasking_Blur.inferenceOnBoxWithBlurMotion(canvas, cache.box[i, :], 13)
                         # canvas = LibMasking_Blur.inferenceOnBoxWithBlurWater(canvas, cache.box[i,:], 4, 4)
                         # canvas = LibMasking_Blur.inferenceBoxWithBlurPencil(canvas, cache.box[i, :], 17, 3, 3)
-                        canvas = LibMasking_Blur.inferenceOnBox_WithBlurPencil(canvas, cache.box[i, :], 17, 0, 0)
+                        canvas = LibMasking_Blur.inferenceOnBox_WithBlurPencil(canvas, cache.box[i, :], 17, 0, 0, 'head')
                     cv2.imwrite('{}/{}'.format(path_out, name), canvas)
                     bar.update(1)
             logging.warning('blur finish...')
@@ -327,14 +291,21 @@ class LibMasking_Blur:
         reader = XVideoReader(path_in)
         writer = XVideoWriter(reader.desc(True))
         writer.open(path_out)
-        with XContextTimer(True) as context:
+        with XContextTimer(True):
             num_frames = len(reader)
             max_num = min(max_num, num_frames) if isinstance(max_num, int) else num_frames
             with tqdm.tqdm(total=max_num) as bar:
                 for n, bgr in zip(range(max_num), reader):
                     cache = LibMasking_Blur.toCache(bgr)
-                    blured_bgr = LibMasking_Blur.doWithGaussianBlur(cache.bgr)
-                    canvas = LibMasking_Blur.workOnSelected(cache.bgr, blured_bgr, mask=LibMasking_Blur.getMask(cache))
+                    canvas = np.copy(cache.bgr)
+                    for i in range(cache.number):
+                        # canvas = LibMasking_Blur.inferenceOnBoxWithBlurGaussian(canvas, cache.box[i, :], 13)
+                        # canvas = LibMasking_Blur.inferenceOnBoxWithBlurMotion(canvas, cache.box[i, :], 13)
+                        # canvas = LibMasking_Blur.inferenceOnBoxWithBlurWater(canvas, cache.box[i,:], 4, 4)
+                        # canvas = LibMasking_Blur.inferenceBoxWithBlurPencil(canvas, cache.box[i, :], 17, 3, 3)
+                        canvas = LibMasking_Blur.inferenceOnBox_WithBlurPencil(canvas, cache.box[i, :], 17, 0, 0, 'head')
                     writer.write(canvas)
                     bar.update(1)
             logging.warning('blur finish...')
+
+

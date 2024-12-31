@@ -5,8 +5,7 @@ import cv2
 import numpy as np
 import tqdm
 from skimage import segmentation
-from .face_helper import *
-from ...base import XPortrait
+from ...base import XPortrait, XPortraitHelper
 from ...utils.context import XContextTimer
 from ...utils.video import XVideoReader, XVideoWriter
 from ... import XManager
@@ -99,7 +98,7 @@ class LibMasking_Mosaic:
             num_pixels = int((nh + nw) / 2)
             mosaic_bgr = LibMasking_Mosaic.resizeDownAndUp(bgr, [0, 0, w, h], num_pixels, num_pixels)
             mask = np.zeros(shape=(h, w), dtype=np.uint8)
-            mask[top:bot, lft:rig] = getFaceMaskByPoints(XPortrait(bgr[top:bot, lft:rig, :]))
+            mask[top:bot, lft:rig] = LibMasking_Mosaic.getFaceMaskByPoints(XPortrait(bgr[top:bot, lft:rig, :]))
             return LibMasking_Mosaic.workOnSelected(cache.bgr, mosaic_bgr, mask=mask)
         else:
             return LibMasking_Mosaic.resizeDownAndUp(bgr, box, num_pixels, num_pixels)
@@ -160,7 +159,11 @@ class LibMasking_Mosaic:
         return np.round(fusion).astype(np.uint8)
 
     @staticmethod
-    def getMaskFromBox(h, w, box, ratio):
+    def getFaceMaskByPoints(cache, n=0, top_line='brow', value=255):
+        return XPortraitHelper.getFaceRegion(cache, index=n, top_line=top_line, value=value)[n]
+
+    @staticmethod
+    def getMaskFromBox(h, w, box, ratio, value=255):
         mask = np.ones(shape=(h, w), dtype=np.uint8)
         lft, top, rig, bot = box
         if ratio > 0:
@@ -170,7 +173,7 @@ class LibMasking_Mosaic:
             top = int(max(0, top - hh * ratio))
             rig = int(min(w, rig + ww * ratio))
             bot = int(min(h, bot + hh * ratio))
-        mask[top:bot, lft:rig] = 255
+        mask[top:bot, lft:rig] = value
         return mask
 
     @staticmethod
@@ -185,7 +188,7 @@ class LibMasking_Mosaic:
             n_div = int((nh + nw) / 2)
             mosaic_bgr = LibMasking_Mosaic.doWithMosaicPolygon(bgr, vis_boundary, n_div=n_div)
             mask = np.zeros(shape=(h, w), dtype=np.uint8)
-            mask[top:bot, lft:rig] = getFaceMaskByPoints(XPortrait(bgr[top:bot, lft:rig, :]))
+            mask[top:bot, lft:rig] = LibMasking_Mosaic.getFaceMaskByPoints(XPortrait(bgr[top:bot, lft:rig, :]))
             return LibMasking_Mosaic.workOnSelected(bgr, mosaic_bgr, mask=mask)
         else:
             lft, top, rig, bot = box
@@ -195,39 +198,30 @@ class LibMasking_Mosaic:
             bgr_copy[top:bot, lft:rig] = mosaic_bgr
             return bgr_copy
 
-    # @staticmethod
-    # def inference(reader_iterator, writer_interator, **kwargs):
-    #     with tqdm.tqdm(total=len(reader_iterator)) as bar:
-    #         for n, source in enumerate(reader_iterator):
-    #             cache = LibMasking_Mosaic.toCache(source)
-    #             mosaic_bgr = LibMasking_Mosaic.doWithMosaicSquare(cache.bgr)
-    #             writer_interator(mosaic_bgr)
-    #             bar.update(1)
-
     @staticmethod
     def inferenceWithBox(bgr, box, parameters):
         mosaic_type = parameters['mosaic_type']
         focus_type = parameters['focus_type']
         if mosaic_type == 'mosaic_pixel_square':
             num_pixel = parameters['num_pixel'] if 'num_pixel' in parameters else 24
-            return LibMasking_Mosaic.inferenceBoxWithMosaicSquare(bgr, box, num_pixel, focus_type)
+            return LibMasking_Mosaic.inferenceBoxWithMosaicSquare(bgr, box, num_pixel, focus_type=focus_type)
         if mosaic_type == 'mosaic_pixel_polygon':
             n_div = parameters['n_div'] if 'n_div' in parameters else 16
             vis_boundary = parameters['vis_boundary'] if 'vis_boundary' in parameters else False
-            return LibMasking_Mosaic.inferenceBoxWithMosaicPolygon(bgr, box, n_div, vis_boundary, focus_type)
+            return LibMasking_Mosaic.inferenceBoxWithMosaicPolygon(bgr, box, n_div, vis_boundary=vis_boundary, focus_type=focus_type)
         # specific config
         if mosaic_type == 'mosaic_pixel_polygon_small':
             # n_div = parameters['n_div'] if 'n_div' in parameters else 8
-            return LibMasking_Mosaic.inferenceBoxWithMosaicPolygon(bgr, box, 8, False, focus_type)
+            return LibMasking_Mosaic.inferenceBoxWithMosaicPolygon(bgr, box, 8, vis_boundary=False, focus_type=focus_type)
         if mosaic_type == 'mosaic_pixel_polygon_small_line':
             # n_div = parameters['n_div'] if 'n_div' in parameters else 8
-            return LibMasking_Mosaic.inferenceBoxWithMosaicPolygon(bgr, box, 8, True, focus_type)
+            return LibMasking_Mosaic.inferenceBoxWithMosaicPolygon(bgr, box, 8, vis_boundary=True, focus_type=focus_type)
         if mosaic_type == 'mosaic_pixel_polygon_big':
             # n_div = parameters['n_div'] if 'n_div' in parameters else 16
-            return LibMasking_Mosaic.inferenceBoxWithMosaicPolygon(bgr, box, 16, False, focus_type)
+            return LibMasking_Mosaic.inferenceBoxWithMosaicPolygon(bgr, box, 16, vis_boundary=False, focus_type=focus_type)
         if mosaic_type == 'mosaic_pixel_polygon_big_line':
             # n_div = parameters['n_div'] if 'n_div' in parameters else 16
-            return LibMasking_Mosaic.inferenceBoxWithMosaicPolygon(bgr, box, 16, True, focus_type)
+            return LibMasking_Mosaic.inferenceBoxWithMosaicPolygon(bgr, box, 16, vis_boundary=True, focus_type=focus_type)
         raise NotImplementedError(parameters)
 
     """

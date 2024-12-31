@@ -11,7 +11,7 @@ def getFaceMaskByPoints(cache, n=0, top_line='brow', value=255):
             return points_rig, points_lft
         if top_line == 'eye':
             points_rig = cache.landmark[n][42:46, :][::-1, :]
-            points_lft = cache.landmark[0][36:40, :][::-1, :]
+            points_lft = cache.landmark[n][36:40, :][::-1, :]
             return points_rig, points_lft
         if top_line == 'brow-eye':
             points_eye_rig = cache.landmark[n][42:46, :][::-1, :]

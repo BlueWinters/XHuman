@@ -12,26 +12,60 @@ class XPortraitHelper:
     """
     """
     @staticmethod
-    def getEyesLength(xcache) -> float:
-        assert isinstance(xcache, XPortrait), type(xcache)
-        lft_eye_len = [np.linalg.norm(xcache.landmark[n][36, :] - xcache.landmark[n][39, :]) for n in range(xcache.number)]
-        rig_eye_len = [np.linalg.norm(xcache.landmark[n][42, :] - xcache.landmark[n][45, :]) for n in range(xcache.number)]
+    def getEyesLength(cache):
+        assert isinstance(cache, XPortrait), type(cache)
+        lft_eye_len = [np.linalg.norm(cache.landmark[n][36, :] - cache.landmark[n][39, :]) for n in range(cache.number)]
+        rig_eye_len = [np.linalg.norm(cache.landmark[n][42, :] - cache.landmark[n][45, :]) for n in range(cache.number)]
         return lft_eye_len, rig_eye_len
 
     @staticmethod
-    def getEyesMeanLength(xcache):
-        lft_eye_len, rig_eye_len = XPortraitHelper.getEyesLength(xcache)
+    def getEyesMeanLength(cache):
+        lft_eye_len, rig_eye_len = XPortraitHelper.getEyesLength(cache)
         return [(lft_len + rig_len) / 2. for lft_len, rig_len in zip(lft_eye_len, rig_eye_len)]
 
     @staticmethod
-    def getAjna(xcache):
-        assert isinstance(xcache, XPortrait), type(xcache)
-        return [np.mean(xcache.landmark[n][17:27, :], axis=0) for n in range(xcache.number)]
+    def getAjna(cache):
+        assert isinstance(cache, XPortrait), type(cache)
+        return [np.mean(cache.landmark[n][17:27, :], axis=0) for n in range(cache.number)]
 
     @staticmethod
-    def getCenterOfEyes(xcache):
-        assert isinstance(xcache, XPortrait), type(xcache)
-        return [np.mean(xcache.landmark[n][36:48, :], axis=0) for n in range(xcache.number)]
+    def getCenterOfEyes(cache):
+        assert isinstance(cache, XPortrait), type(cache)
+        return [np.mean(cache.landmark[n][36:48, :], axis=0) for n in range(cache.number)]
+
+    @staticmethod
+    def getFaceRegion(cache, index=None, top_line='brow', value=255):
+        def getTopLinePoints(points):
+            if top_line == 'brow':
+                pts_rig = points[22:27, :][::-1, :]
+                pts_lft = points[17:22, :][::-1, :]
+                return pts_rig, pts_lft
+            if top_line == 'eye':
+                pts_rig = points[42:46, :][::-1, :]
+                pts_lft = points[36:40, :][::-1, :]
+                return pts_rig, pts_lft
+            if top_line == 'brow-eye':
+                points_eye_rig = points[42:46, :][::-1, :]
+                points_eye_lft = points[36:40, :][::-1, :]
+                points_brow_rig = points[22:26, :][::-1, :]
+                points_brow_lft = points[18:22, :][::-1, :]
+                pts_rig = np.round((points_eye_rig + points_brow_rig) / 2).astype(np.int32)
+                pts_lft = np.round((points_eye_lft + points_brow_lft) / 2).astype(np.int32)
+                return pts_rig, pts_lft
+            raise NotImplementedError(top_line)
+
+        assert isinstance(cache, XPortrait), type(cache)
+        mask_list = []
+        index_list = [index] if isinstance(index, int) else list(range(cache.number))
+        for n in index_list:
+            landmark = cache.landmark[n]
+            points_rig, points_lft = getTopLinePoints(landmark)
+            points_profile = landmark[0:17, :]
+            points_all = np.concatenate([points_profile, points_rig, points_lft], axis=0).round().astype(np.int32)
+            mask_face = np.zeros(cache.shape, dtype=np.uint8)
+            cv2.fillPoly(mask_face, [points_all], (value, value, value))
+            mask_list.append(mask_face)
+        return mask_list
 
     """
     """
