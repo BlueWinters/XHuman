@@ -435,6 +435,7 @@ class LibScaner:
                     len_ear = np.linalg.norm(lft_ear - rig_ear)
                     lft = lft_ear[0]
                     rig = rig_ear[0]
+
                     ctr_ear = (lft_ear + rig_ear) / 2
                     top = int(max(ctr_ear[1] - 0.4 * len_ear, 0))
                     bot = int(min(ctr_ear[1] + 0.6 * len_ear, h))
@@ -446,7 +447,7 @@ class LibScaner:
 
     @staticmethod
     def updateWithYOLO(index_frame, cache, video_info: VideoInfo):
-        module = XManager.getModules('ultralytics')['yolo11n-pose']
+        module = XManager.getModules('ultralytics')['yolo11m-pose']
         person_list_new = []
         # cfg_track = '{}/tracker.yaml'.format(os.path.split(__file__)[0])  # 'bytetrack.yaml'
         result = module.track(cache.bgr, persist=True, conf=0.3, iou=0.5, classes=[0], tracker='bytetrack.yaml', verbose=False)[0]
@@ -459,7 +460,7 @@ class LibScaner:
         identity = np.reshape(result.boxes.id.numpy().astype(np.int32), (-1,))
 
         # update common(tracking without lose)
-        index_list = list(range(number))
+        index_list = np.argsort(score)[::-1].tolist()
         for i, n in enumerate(index_list):
             cur_one_box_tracker = box[n, :]  # 4: lft,top,rig,bot
             cur_one_box_face = LibScaner.transformPoints2FaceBox(cache.bgr, points[n, :, :], cur_one_box_tracker)
@@ -490,6 +491,8 @@ class LibScaner:
                     # create a new person
                     person_new = video_info.createNewPerson(index_frame, cache.bgr, cur_one_box_tracker, cur_one_box_face)
                     if person_new is None:
+                        if len(video_info.person_list_current) == 0:
+                            continue
                         person_cur = video_info.person_list_current.pop(dis_min_idx)
                         assert isinstance(person_cur, Person)
                         person_cur.appendInfo(index_frame, cur_one_box_tracker, cur_one_box_face)
