@@ -5,6 +5,7 @@ import cv2
 import numpy as np
 import tqdm
 from skimage import segmentation
+from ...geometry import Rectangle
 from ...base import XPortrait, XPortraitHelper
 from ...utils.context import XContextTimer
 from ...utils.video import XVideoReader, XVideoWriter
@@ -180,16 +181,17 @@ class LibMasking_Mosaic:
     def inferenceBoxWithMosaicPolygon(bgr, box, n_div, vis_boundary, focus_type):
         if focus_type == 'head':
             h, w, c = bgr.shape
-            lft, top, rig, bot = box
-            hh = bot - top
-            ww = rig - lft
-            nh = int(float(h / hh) * n_div)
-            nw = int(float(w / ww) * n_div)
-            n_div = int((nh + nw) / 2)
-            mosaic_bgr = LibMasking_Mosaic.doWithMosaicPolygon(bgr, vis_boundary, n_div=n_div)
+            lft, top, rig, bot = Rectangle(box).toSquare().asInt()
+            part = bgr[top:bot, lft:rig]
+            part_resized = cv2.resize(part, (256, 256))
+            mosaic_bgr = LibMasking_Mosaic.doWithMosaicPolygon(part_resized, vis_boundary, n_div=n_div)
+            bgr_copy = np.copy(bgr)
+            bgr_copy[top:bot, lft:rig] = cv2.resize(mosaic_bgr, part.shape[:2][::-1], interpolation=cv2.INTER_NEAREST)
             mask = np.zeros(shape=(h, w), dtype=np.uint8)
-            mask[top:bot, lft:rig] = LibMasking_Mosaic.getFaceMaskByPoints(XPortrait(bgr[top:bot, lft:rig, :]))
-            return LibMasking_Mosaic.workOnSelected(bgr, mosaic_bgr, mask=mask)
+            mask[top:bot, lft:rig] = LibMasking_Mosaic.getFaceMaskByPoints(XPortrait(part))
+            mask = cv2.dilate(mask, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (11, 11)))
+            bgr_copy = LibMasking_Mosaic.workOnSelected(bgr, bgr_copy, mask=mask)
+            return bgr_copy
         else:
             lft, top, rig, bot = box
             part = np.copy(bgr[top:bot, lft:rig])

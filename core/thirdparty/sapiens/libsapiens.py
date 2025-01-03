@@ -9,7 +9,6 @@ from .normal import SapiensNormal
 from ... import XManager
 
 
-
 class LibSapiensWrapper:
     """
     """

@@ -74,11 +74,31 @@ class LibMasking_Sticker:
     @staticmethod
     def inferenceWithBox(bgr, box, sticker):
         if isinstance(sticker, np.ndarray):
+            assert sticker.shape[2] == 3 or sticker.shape[2] == 4, sticker.shape[2]
             lft, top, rig, bot = box
             h = bot - top
             w = rig - lft
-            bgr[top:bot, lft:rig, :] = cv2.resize(sticker, (w, h))
-            return bgr
+            if sticker.shape[2] == 3:
+                bgr_copy = np.copy(bgr)
+                bgr_copy[top:bot, lft:rig, :] = cv2.resize(sticker, (w, h))
+                return bgr_copy
+            if sticker.shape[2] == 4:
+                resized_sticker = cv2.resize(sticker, (w, h))
+                sticker_bgr = resized_sticker[:, :, :3]
+                sticker_mask = resized_sticker[:, :, 3:4]
+                # mask = np.zeros_like(shape=bgr.shape)
+                # bgr_copy = np.copy(bgr)
+                # bgr_copy[top:bot, lft:rig, :] = sticker_bgr
+                # mask[top:bot, lft:rig, :] = sticker_mask
+                # multi = mask.astype(np.float32) / 255.
+                # bgr = np.round(bgr * (1 - multi) + bgr_copy * multi).astype(np.uint8)
+                part = bgr[top:bot, lft:rig, :]
+                mask = sticker_mask.astype(np.float32) / 255.
+                fusion = part * (1 - mask) + sticker_bgr * mask
+                fusion_bgr = np.round(fusion).astype(np.uint8)
+                bgr_copy = np.copy(bgr)
+                bgr_copy[top:bot, lft:rig, :] = fusion_bgr
+                return bgr_copy
         if isinstance(sticker, dict):
             sticker_image = sticker['bgr']
             if 'eyes_center' in sticker:
@@ -100,8 +120,8 @@ class LibMasking_Sticker:
                 param = dict(dsize=(dst_w, dst_h), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT, borderValue=(255, 255, 255))
                 sticker_warped = cv2.warpAffine(sticker_image, matrix, **param)
                 sticker_warped_bgr, sticker_warped_alpha = sticker_warped[:, :, :3], sticker_warped[:, :, 3:4]
-                multi = sticker_warped_alpha.astype(np.float32) / 255.
-                fusion = part * (1 - multi) + sticker_warped_bgr * multi
+                mask = sticker_warped_alpha.astype(np.float32) / 255.
+                fusion = part * (1 - mask) + sticker_warped_bgr * mask
                 fusion_bgr = np.round(fusion).astype(np.uint8)
                 bgr_copy = np.copy(bgr)
                 bgr_copy[top:bot, lft:rig, :] = fusion_bgr

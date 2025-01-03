@@ -17,7 +17,7 @@ except ImportError:
     logging.error('no such module insightface, try to: pip install insightface')
 
 
-class LibInsightFace:
+class LibInsightFaceWrapper:
     """
     """
     @staticmethod
@@ -27,8 +27,8 @@ class LibInsightFace:
         }
 
         return [
-            *['{}/models/buffalo_l/{}'.format(LibInsightFace.EngineConfig['folder'], each) for each in file_list['buffalo_l']],
-            '{}/inswapper_128.onnx'.format(LibInsightFace.EngineConfig['folder']),
+            *['{}/models/buffalo_l/{}'.format(LibInsightFaceWrapper.EngineConfig['folder'], each) for each in file_list['buffalo_l']],
+            '{}/inswapper_128.onnx'.format(LibInsightFaceWrapper.EngineConfig['folder']),
         ]
 
     """

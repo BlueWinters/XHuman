@@ -21,10 +21,10 @@ def maskingWithBlur(canvas, cache, i):
                                   LibMasking_Blur.inferenceOnBox_WithBlurMotion(canvas, None, 13)], axis=0))
     result.append(np.concatenate([LibMasking_Blur.inferenceOnBox_WithBlurWater(canvas, cache.box[i, :], 4, 4),
                                   LibMasking_Blur.inferenceOnBox_WithBlurWater(canvas, None, 4, 4)], axis=0))
-    result.append(np.concatenate([LibMasking_Blur.inferenceOnBox_WithBlurPencil(canvas, cache.box[i, :], 17, 3, 3),
-                                  LibMasking_Blur.inferenceOnBox_WithBlurPencil(canvas, None, 17, 3, 3)], axis=0))
-    result.append(np.concatenate([LibMasking_Blur.inferenceOnBox_WithBlurPencil(canvas, cache.box[i, :], 17, 0, 0),
-                                  LibMasking_Blur.inferenceOnBox_WithBlurPencil(canvas, None, 17, 0, 0)], axis=0))
+    result.append(np.concatenate([LibMasking_Blur.inferenceOnBox_WithBlurDiffusion(canvas, cache.box[i, :], 17, 3, 3),
+                                  LibMasking_Blur.inferenceOnBox_WithBlurDiffusion(canvas, None, 17, 3, 3)], axis=0))
+    result.append(np.concatenate([LibMasking_Blur.inferenceOnBox_WithBlurDiffusion(canvas, cache.box[i, :], 17, 0, 0),
+                                  LibMasking_Blur.inferenceOnBox_WithBlurDiffusion(canvas, None, 17, 0, 0)], axis=0))
     return np.concatenate(result, axis=1)
 
 def maskingWithMosaic(canvas, cache, i):
@@ -80,22 +80,22 @@ def maskingAllWithBlur(cache, path_out, name):
 
     canvas = np.copy(cache.bgr)
     for i in range(cache.number):
-        canvas = LibMasking_Blur.inferenceOnBox_WithBlurPencil(canvas, cache.box[i, :], 17, 3, 3, 'box')
+        canvas = LibMasking_Blur.inferenceOnBox_WithBlurDiffusion(canvas, cache.box[i, :], 17, 3, 3, 'box')
     cv2.imwrite('{}/{}-blur-7.png'.format(path_out, name[:-4]), canvas)
 
     canvas = np.copy(cache.bgr)
     for i in range(cache.number):
-        canvas = LibMasking_Blur.inferenceOnBox_WithBlurPencil(canvas, cache.box[i, :], 17, 3, 3, 'head')
+        canvas = LibMasking_Blur.inferenceOnBox_WithBlurDiffusion(canvas, cache.box[i, :], 17, 3, 3, 'head')
     cv2.imwrite('{}/{}-blur-8.png'.format(path_out, name[:-4]), canvas)
 
     canvas = np.copy(cache.bgr)
     for i in range(cache.number):
-        canvas = LibMasking_Blur.inferenceOnBox_WithBlurPencil(canvas, cache.box[i, :], 17, 0, 0, 'box')
+        canvas = LibMasking_Blur.inferenceOnBox_WithBlurDiffusion(canvas, cache.box[i, :], 17, 0, 0, 'box')
     cv2.imwrite('{}/{}-blur-9.png'.format(path_out, name[:-4]), canvas)
 
     canvas = np.copy(cache.bgr)
     for i in range(cache.number):
-        canvas = LibMasking_Blur.inferenceOnBox_WithBlurPencil(canvas, cache.box[i, :], 17, 0, 0, 'head')
+        canvas = LibMasking_Blur.inferenceOnBox_WithBlurDiffusion(canvas, cache.box[i, :], 17, 0, 0, 'head')
     cv2.imwrite('{}/{}-blur-10.png'.format(path_out, name[:-4]), canvas)
 
 def maskingAllWithMosaic(cache, path_out, name):
@@ -184,17 +184,17 @@ def benchmark(path_in, path_out):
     #             bar.update(1)
     #     logging.warning('blur finish...')
 
-    name = 'example.png'
+    name = 'obama.png'
     path_in = '{}/document'.format(os.path.split(__file__)[0])
-    path_out = '{}/document'.format(os.path.split(__file__)[0])
+    path_out = '{}/document/obama'.format(os.path.split(__file__)[0])
     bgr = cv2.imread('{}/{}'.format(path_in, name), cv2.IMREAD_COLOR)
     cache = XPortrait(bgr)
     # blur
     # maskingAllWithBlur(cache, path_out, name)
     # mosaic
-    # maskingAllWithMosaic(cache, path_out, name)
+    maskingAllWithMosaic(cache, path_out, name)
     # sticker
-    maskingAllWithSticker(cache, path_out, name)
+    # maskingAllWithSticker(cache, path_out, name)
 
     # cache = XBody(bgr)
     # for n in range(cache.number):

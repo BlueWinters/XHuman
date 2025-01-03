@@ -1,2 +1,2 @@
 
-from .libsapiens import LibSapiensWrapper as LibSapiens
+from .libsapiens import LibSapiensWrapper

@@ -28,6 +28,7 @@ GlobalModuleDictClass['face_masking'] = LibMasking
 
 # third party
 GlobalModuleDictClass['insightface'] = LibInsightFace
+GlobalModuleDictClass['ultralytics'] = LibUltralytics
 GlobalModuleDictClass['face_restoration_gfpgan'] = LibFaceRestorationGFPGAN  # 1.4
 GlobalModuleDictClass['human_detection_yolox'] = LibYoloX
 GlobalModuleDictClass['rtmpose'] = LibRTMPose

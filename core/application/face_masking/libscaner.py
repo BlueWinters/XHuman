@@ -1,4 +1,4 @@
-
+import copy
 import logging
 import os
 import typing
@@ -7,6 +7,7 @@ import numpy as np
 import dataclasses
 import tqdm
 import json
+from .boundingbox import BoundingBox
 from ...base.cache import XPortrait, XPortraitHelper
 from ...thirdparty.cache import XBody, XBodyHelper
 from ...utils.context import XContextTimer
@@ -15,16 +16,22 @@ from ...utils.color import Colors
 from ... import XManager
 
 
-@dataclasses.dataclass(frozen=True)
+@dataclasses.dataclass(frozen=False)
 class PersonFrameInfo:
     index_frame: int
-    box: np.ndarray  # 4:<int>
+    box_face: np.ndarray  # 4:<int>
+    box_tracker: np.ndarray  # 4:<int>
     # points: np.ndarray  # 5,2:<int>
+    box_copy: bool
 
     @staticmethod
     def fromString(string):
         info = [int(v) for v in string[1:-1].split(',')]
-        return PersonFrameInfo(index_frame=info[0], box=np.array(info[1:5], dtype=np.int32))
+        return PersonFrameInfo(
+            index_frame=info[0],
+            box_face=np.array(info[1:5], dtype=np.int32),
+            box_tracker=np.zeros(shape=(4,), dtype=np.int32),
+            box_copy=False)
 
 
 class Person:
@@ -47,13 +54,49 @@ class Person:
         self.activate = True
         self.preview = None
         self.frame_info_list = []
+        self.smooth_box_tracker = 0.8
+        self.smooth_box_face = 0.8
 
     def setActivate(self, activate):
         self.activate = bool(activate)
 
-    def appendInfo(self, index_frame, box):
+    def smoothing(self):
+        length = len(self.frame_info_list)
+        if length >= 2:
+            info1 = self.frame_info_list[length - 1]
+            info2 = self.frame_info_list[length - 2]
+            if info1.box_copy is False and info2.box_copy is True:
+                # search
+                index = 0
+                for n in range(length-2, -1, -1):
+                    info_cur = self.frame_info_list[n]  # -2-(len-2) ==> -len ==> the last
+                    if info_cur.box_copy is False:
+                        index = n
+                        break
+                # refine
+                info_head = self.frame_info_list[index]
+                info_tail = self.frame_info_list[length - 1]
+                copy_length = length - 1 - index - 1
+                for n in range(1, copy_length+1):
+                    info_cur = self.frame_info_list[index+n]
+                    assert info_cur.box_copy is True, (index, n, length)
+                    r = float(n / (copy_length+1))
+                    info_cur.box_face = (r * info_head.box_face + (1 - r) * info_tail.box_face).astype(np.int32)
+                    info_cur.box_copy = False
+
+    def appendInfo(self, index_frame, box_tracker, box_face):
         # TODO: interpolate frame info
-        self.frame_info_list.append(PersonFrameInfo(index_frame=index_frame, box=box))
+        lft, top, rig, bot = box_face
+        if np.sum(box_face.astype(np.int32)) != 0 and lft < rig and top < bot:
+            self.frame_info_list.append(PersonFrameInfo(index_frame=index_frame, box_tracker=box_tracker, box_face=box_face, box_copy=False))
+        else:
+            assert len(self.frame_info_list) > 0
+            info_last = self.frame_info_list[-1]
+            if info_last.index_frame == index_frame - 1:
+                box_face = np.copy(info_last.box_face)
+                self.frame_info_list.append(PersonFrameInfo(index_frame=index_frame, box_tracker=box_tracker, box_face=box_face, box_copy=True))
+        # enforce to smoothing
+        self.smoothing()
 
     def getLastInfo(self) -> PersonFrameInfo:
         return self.frame_info_list[-1]
@@ -64,13 +107,13 @@ class Person:
         time_len = len(self.frame_info_list)
         info = dict(identity=self.identity, time_beg=time_beg, time_end=time_end, time_len=time_len)
         if with_frame_info is True:
-            info['frame_info_list'] = [str([info.index_frame, *info.box.tolist()]) for info in self.frame_info_list]
+            info['frame_info_list'] = [str([info.index_frame, *info.box_face.tolist()]) for info in self.frame_info_list]
         return info
 
-    def setIdentityPreview(self, bgr, box):
+    def setIdentityPreview(self, bgr, box_face):
         if self.preview is None:
-            lft, top, rig, bot = box
-            self.preview = np.copy(bgr[top:bot, lft:rig, :])
+            lft, top, rig, bot = box_face
+            self.preview = dict(box=box_face, image=np.copy(bgr), face=np.copy(bgr[top:bot, lft:rig]))
 
     """
     """
@@ -83,11 +126,17 @@ class Person:
             def next(self):
                 return self.data[self.index]
 
+            def previous(self):
+                return self.data[self.index-1]
+
             def update(self):
                 self.index += 1
 
             def __len__(self):
                 assert len(self.data)
+
+            def __str__(self):
+                return '{}, {}'.format(self.index, len(self.data))
 
         return AsynchronousCursor(self.frame_info_list)
 
@@ -118,7 +167,7 @@ class VideoInfo:
             self.person_identity_history.append(person)
         self.person_list_current += person_list_new
 
-    def createNewPerson(self, index_frame, bgr, box):
+    def createNewPerson(self, index_frame, bgr, box_tracker, box_face):
         if self.isFixedNumber and self.person_identity_seq == self.person_fixed_num:
             if len(self.person_identity_history) > 0:
                 non_activate_index = [n for n, person in enumerate(self.person_identity_history) if person.activate is False]
@@ -127,20 +176,20 @@ class VideoInfo:
                 for index in non_activate_index:
                     person = self.person_identity_history[index]
                     info = person.getLastInfo()
-                    iou = XRectangle.iou(XRectangle(info.box), XRectangle(box))
+                    iou = BoundingBox.iou(BoundingBox(info.box_tracker), BoundingBox(box_tracker))
                     if iou >= backtracking_iou:
                         backtracking_index = index
                         backtracking_iou = iou
                 person = self.person_identity_history.pop(backtracking_index)
                 person.setActivate(True)
-                person.appendInfo(index_frame, box)
+                person.appendInfo(index_frame, box_tracker, box_face)
                 return person
             return None
         # create person as common
         self.person_identity_seq += 1
         person = Person(self.person_identity_seq)
-        person.appendInfo(index_frame, box)
-        person.setIdentityPreview(bgr, box)
+        person.appendInfo(index_frame, box_tracker, box_face)
+        person.setIdentityPreview(bgr, box_face)
         return person
 
     def getSortedHistory(self):
@@ -160,7 +209,11 @@ class VideoInfo:
             resized = cv2.resize(bgr, (size, size))
             return resized if is_bgr is True else cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
 
-        return {person.identity: transform(person.preview) for person in self.getSortedHistory()}
+        preview_dict = {}
+        for person in self.getSortedHistory():
+            preview = person.preview
+            preview_dict[person.identity] = dict(box=preview['box'], image=preview['image'], face=transform(preview['face']))
+        return preview_dict
 
     def getIdentityPreviewList(self, size=256, is_bgr=True):
         def transform(bgr):
@@ -180,77 +233,6 @@ class VideoInfo:
             video_info.person_identity_history = [Person.loadFromDict(info) for info in json.loads(kwargs['video_info_string'])]
             return video_info
         raise NotImplementedError('both "path_in_json" and "path_in_json" not in kwargs')
-
-
-class XRectangle:
-    def __init__(self, points):
-        self.x_min = 0
-        self.x_max = 0
-        self.y_min = 0
-        self.y_max = 0
-        self.points = None
-        # assign
-        self.fromPoints(points)
-
-    def fromPoints(self, points):
-        assert isinstance(points, np.ndarray)
-        if self.points is None:
-            if len(points.shape) == 1:
-                assert points.shape[0] == 4, points.shape
-                self.points = np.copy(points)
-                self.x_min = points[0]  # lft
-                self.x_max = points[2]  # top
-                self.y_min = points[1]  # top
-                self.y_max = points[3]  # bot
-            if len(points.shape) == 2:
-                assert points.shape[1] == 2, points.shape
-                self.points = np.copy(points)
-                self.x_min = np.min(points[:, 0])
-                self.x_max = np.max(points[:, 0])
-                self.y_min = np.min(points[:, 1])
-                self.y_max = np.max(points[:, 1])
-
-    def area(self) -> float:
-        return (self.y_max - self.y_min) * (self.x_max - self.x_min)
-
-    @staticmethod
-    def iou(a, b) -> float:
-        assert isinstance(a, XRectangle)
-        assert isinstance(b, XRectangle)
-        xx1 = max(a.x_min, b.x_min)
-        yy1 = max(a.y_min, b.y_min)
-        xx2 = min(a.x_max, b.x_max)
-        yy2 = min(a.y_max, b.y_max)
-        inter_area = (max(0, xx2 - xx1 + 1) * max(0, yy2 - yy1 + 1))
-        area_a = a.area()
-        area_b = b.area()
-        if area_a == 0 or area_b == 0:
-            return 0.
-        union_area = area_a + area_b - inter_area
-        return float(inter_area / union_area) if union_area > 0. else 0.
-
-    @staticmethod
-    def distance(a, b) -> float:
-        assert isinstance(a, XRectangle)
-        assert isinstance(b, XRectangle)
-        a_cx = (a.x_min + a.x_max) / 2.
-        a_cy = (a.y_min + a.y_max) / 2.
-        b_cx = (b.x_min + b.x_max) / 2.
-        b_cy = (b.y_min + b.y_max) / 2.
-        return np.linalg.norm(np.array([a_cx-b_cx, a_cy-b_cy], dtype=np.float32))
-
-    @staticmethod
-    def findBestMatch(pre_all_boxes, cur_one_box):
-        iou_max = 0.
-        idx_max = -1
-        for n in range(len(pre_all_boxes)):
-            pre_one_rect = XRectangle(pre_all_boxes[n, :, :])
-            cur_one_rect = XRectangle(cur_one_box)
-            iou = XRectangle.iou(pre_one_rect, cur_one_rect)
-            if iou > iou_max:
-                iou_max = iou
-                idx_max = n
-        return idx_max, iou_max
 
 
 class LibScaner:
@@ -307,7 +289,7 @@ class LibScaner:
     """
     """
     @staticmethod
-    def findBestMatch(person_list, cur_one_box):
+    def findBestMatch(person_list, cur_one_box_tracker):
         iou_max_val = 0.
         iou_max_idx = -1
         dis_min_val = 10000
@@ -315,13 +297,13 @@ class LibScaner:
         for n, person in enumerate(person_list):
             assert isinstance(person, Person)
             frame_info = person.getLastInfo()
-            pre_one_rect = XRectangle(frame_info.box)
-            cur_one_rect = XRectangle(cur_one_box)
-            iou = XRectangle.iou(pre_one_rect, cur_one_rect)
+            pre_one_rect = BoundingBox(frame_info.box_tracker)
+            cur_one_rect = BoundingBox(cur_one_box_tracker)
+            iou = BoundingBox.iou(pre_one_rect, cur_one_rect)
             if iou > iou_max_val:
                 iou_max_val = iou
                 iou_max_idx = n
-            dis = XRectangle.distance(pre_one_rect, cur_one_rect)
+            dis = BoundingBox.distance(pre_one_rect, cur_one_rect)
             if dis < dis_min_val:
                 dis_min_val = dis
                 dis_min_idx = n
@@ -339,15 +321,15 @@ class LibScaner:
             if iou_max_idx != -1 and (iou_max_val > LibScaner.IOU_Threshold or video_info.isFixedNumber):
                 person_cur = video_info.person_list_current.pop(iou_max_idx)
                 assert isinstance(person_cur, Person)
-                person_cur.appendInfo(index_frame, cur_one_box)
+                person_cur.appendInfo(index_frame, cur_one_box, cur_one_box)
                 person_list_new.append(person_cur)
             else:
                 # create a new person
-                person_new = video_info.createNewPerson(index_frame, cache.bgr, cur_one_box)
+                person_new = video_info.createNewPerson(index_frame, cache.bgr, cur_one_box, cur_one_box)
                 if person_new is None:
                     person_cur = video_info.person_list_current.pop(dis_min_idx)
                     assert isinstance(person_cur, Person)
-                    person_cur.appendInfo(index_frame, cur_one_box)
+                    person_cur.appendInfo(index_frame, cur_one_box, cur_one_box)
                     person_list_new.append(person_cur)
                 else:
                     person_list_new.append(person_new)
@@ -368,43 +350,155 @@ class LibScaner:
         return -1
 
     @staticmethod
+    def transformPoints2FaceBox(bgr, key_points, box, threshold=0.5):
+        h, w, c = bgr.shape
+        confidence = key_points[:, 2].astype(np.float32)
+        points = key_points[:, :2].astype(np.float32)
+        if confidence[0] > threshold:
+            if confidence[3] > threshold and confidence[4] > threshold:
+                lft_ear = points[4, :]
+                rig_ear = points[3, :]
+                len_ear = np.linalg.norm(lft_ear - rig_ear)
+                lft = lft_ear[0]
+                rig = rig_ear[0]
+                nose = points[0, :]
+                top = int(max(nose[1] - 0.4*len_ear, 0))
+                bot = int(min(nose[1] + 0.6*len_ear, h))
+                # return np.array([lft, top, rig, bot], dtype=np.int32)
+                bbox = BoundingBox(np.array([lft, top, rig, bot], dtype=np.int32)).toSquare().clip(0, 0, w, h).asInt()
+                return np.array(bbox, dtype=np.int32)
+            else:
+                if confidence[1] > threshold and confidence[2] > threshold:
+                    lft_eye = points[2, :]
+                    rig_eye = points[1, :]
+                    len_eye = np.linalg.norm(lft_eye - rig_eye)
+                    lft = int(max(lft_eye[0] - 0.5*len_eye, 0))
+                    rig = int(min(rig_eye[0] + 0.5*len_eye, w))
+                    if confidence[3] > threshold:
+                        rig = points[3, 0]
+                    if confidence[4] > threshold:
+                        lft = points[4, 0]
+                    len_lft2rig = rig - lft
+                    nose = points[0, :]
+                    top = int(max(nose[1] - 0.4*len_lft2rig, 0))
+                    bot = int(min(nose[1] + 0.6*len_lft2rig, h))
+                    # return np.array([lft, top, rig, bot], dtype=np.int32)
+                    bbox = BoundingBox(np.array([lft, top, rig, bot], dtype=np.int32)).toSquare().clip(0, 0, w, h).asInt()
+                    return np.array(bbox, dtype=np.int32)
+                else:
+                    return np.array([0, 0, 0, 0], dtype=np.int32)
+                    # nose = points[0, :]
+                    # lft = copy.deepcopy(nose[0])
+                    # rig = copy.deepcopy(nose[0])
+                    # flag_lft = False
+                    # flag_rig = False
+                    # if confidence[2] > threshold and points[2, 0] < lft:
+                    #     lft = points[2, 0]
+                    #     flag_lft = True
+                    # if confidence[4] > threshold and points[4, 0] < lft:
+                    #     lft = points[4, 0]
+                    #     flag_lft = True
+                    # if confidence[1] > threshold and points[1, 0] > rig:
+                    #     rig = points[1, 0]
+                    #     flag_rig = True
+                    # if confidence[3] > threshold and points[3, 0] > rig:
+                    #     rig = points[3, 0]
+                    #     flag_rig = True
+                    # len_lft2rig = (rig - lft) * 2
+                    # nose = points[0, :]
+                    # top = int(max(nose[1] - 0.4 * len_lft2rig, 0))
+                    # bot = int(min(nose[1] + 0.6 * len_lft2rig, h))
+                    # bbox = BoundingBox(np.array([lft, top, rig, bot], dtype=np.int32)).toSquare().clip(0, 0, w, h).asInt()
+                    # return np.array(bbox, dtype=np.int32)
+        else:
+            if confidence[1] > threshold and confidence[2] > threshold:
+                lft_eye = points[2, :]
+                rig_eye = points[1, :]
+                len_eye = np.linalg.norm(lft_eye - rig_eye)
+                lft = int(max(lft_eye[0] - 0.5 * len_eye, 0))
+                rig = int(min(rig_eye[0] + 0.5 * len_eye, w))
+                if confidence[3] > threshold:
+                    rig = points[3, 0]
+                if confidence[4] > threshold:
+                    lft = points[4, 0]
+                len_lft2rig = rig - lft
+                ctr_eye = (lft_eye + rig_eye) / 2
+                top = int(max(ctr_eye[1] - 0.1 * len_lft2rig, 0))
+                bot = int(min(ctr_eye[1] + 0.9 * len_lft2rig, h))
+                # return np.array([lft, top, rig, bot], dtype=np.int32)
+                bbox = BoundingBox(np.array([lft, top, rig, bot], dtype=np.int32)).toSquare().clip(0, 0, w, h).asInt()
+                return np.array(bbox, dtype=np.int32)
+            else:
+                if confidence[3] > threshold and confidence[4] > threshold:
+                    lft_ear = points[4, :]
+                    rig_ear = points[3, :]
+                    len_ear = np.linalg.norm(lft_ear - rig_ear)
+                    lft = lft_ear[0]
+                    rig = rig_ear[0]
+                    ctr_ear = (lft_ear + rig_ear) / 2
+                    top = int(max(ctr_ear[1] - 0.4 * len_ear, 0))
+                    bot = int(min(ctr_ear[1] + 0.6 * len_ear, h))
+                    # return np.array([lft, top, rig, bot], dtype=np.int32)
+                    bbox = BoundingBox(np.array([lft, top, rig, bot], dtype=np.int32)).toSquare().clip(0, 0, w, h).asInt()
+                    return np.array(bbox, dtype=np.int32)
+                else:
+                    return np.array([0, 0, 0, 0], dtype=np.int32)
+
+    @staticmethod
     def updateWithYOLO(index_frame, cache, video_info: VideoInfo):
-        module = XManager.getModules('ultralytics').getSpecific('yolo11n')
+        module = XManager.getModules('ultralytics')['yolo11n-pose']
         person_list_new = []
-        result = module.track(cache.bgr, persist=True, tracker='bytetrack.yaml')[0]
+        # cfg_track = '{}/tracker.yaml'.format(os.path.split(__file__)[0])  # 'bytetrack.yaml'
+        result = module.track(cache.bgr, persist=True, conf=0.3, iou=0.5, classes=[0], tracker='bytetrack.yaml', verbose=False)[0]
         number = len(result)
         # num_max = min(number, video_info.person_fixed_num) if video_info.isFixedNumber else number
         cls = np.reshape(np.round(result.boxes.cls.numpy()).astype(np.int32), (-1,))
         box = np.reshape(np.round(result.boxes.xyxy.numpy()).astype(np.int32), (-1, 4,))
+        points = np.reshape(np.round(result.keypoints.data.cpu().numpy()).astype(np.int32), (-1, 17, 3))
         score = np.reshape(result.boxes.conf.numpy().astype(np.float32), (-1,))
         identity = np.reshape(result.boxes.id.numpy().astype(np.int32), (-1,))
-        for n in range(number):
-            cur_one_box = box[n, :]  # 4: lft,top,rig,bot
+
+        # update common(tracking without lose)
+        index_list = list(range(number))
+        for i, n in enumerate(index_list):
+            cur_one_box_tracker = box[n, :]  # 4: lft,top,rig,bot
+            cur_one_box_face = LibScaner.transformPoints2FaceBox(cache.bgr, points[n, :, :], cur_one_box_tracker)
             index = LibScaner.matchPrevious(video_info.person_list_current, int(identity[n]))
             if cls[n] != 0:
+                index_list.pop(i)
                 continue  # only person id needed
             if index != -1:
                 person_cur = video_info.person_list_current.pop(index)
                 assert isinstance(person_cur, Person)
-                person_cur.appendInfo(index_frame, cur_one_box)
+                person_cur.appendInfo(index_frame, cur_one_box_tracker, cur_one_box_face)
                 person_list_new.append(person_cur)
+                index_list.pop(i)
                 continue
-            iou_max_idx, iou_max_val, dis_min_idx, dis_min_val = LibScaner.findBestMatch(video_info.person_list_current, cur_one_box)
+
+        # update from history
+        for i, n in enumerate(index_list):
+            cur_one_box_tracker = box[n, :]  # 4: lft,top,rig,bot
+            cur_one_box_face = LibScaner.transformPoints2FaceBox(cache.bgr, points[n, :, :], cur_one_box_tracker)
+            iou_max_idx, iou_max_val, dis_min_idx, dis_min_val = LibScaner.findBestMatch(video_info.person_list_current, cur_one_box_tracker)
             if iou_max_idx != -1 and (iou_max_val > LibScaner.IOU_Threshold or video_info.isFixedNumber):
                 person_cur = video_info.person_list_current.pop(iou_max_idx)
                 assert isinstance(person_cur, Person)
-                person_cur.appendInfo(index_frame, cur_one_box)
+                person_cur.appendInfo(index_frame, cur_one_box_tracker, cur_one_box_face)
                 person_list_new.append(person_cur)
             else:
-                # create a new person
-                person_new = video_info.createNewPerson(index_frame, cache.bgr, cur_one_box)
-                if person_new is None:
-                    person_cur = video_info.person_list_current.pop(dis_min_idx)
-                    assert isinstance(person_cur, Person)
-                    person_cur.appendInfo(index_frame, cur_one_box)
-                    person_list_new.append(person_cur)
+                if np.sum(cur_one_box_face) > 0:
+                    # create a new person
+                    person_new = video_info.createNewPerson(index_frame, cache.bgr, cur_one_box_tracker, cur_one_box_face)
+                    if person_new is None:
+                        person_cur = video_info.person_list_current.pop(dis_min_idx)
+                        assert isinstance(person_cur, Person)
+                        person_cur.appendInfo(index_frame, cur_one_box_tracker, cur_one_box_face)
+                        person_list_new.append(person_cur)
+                    else:
+                        person_list_new.append(person_new)
                 else:
-                    person_list_new.append(person_new)
+                    # skip the unreliable face box
+                    pass
         # update current person list
         video_info.updatePersonList(person_list_new)
         # set fixed number
@@ -421,11 +515,10 @@ class LibScaner:
                 for n, source in enumerate(reader_iterator):
                     if n % sample_step == 0:
                         cache = LibScaner.packageAsCache(source)
-                        LibScaner.updateCommon(n, cache, video_info)
-                        # LibScaner.updateWithYOLO(n, cache, video_info)
+                        # LibScaner.updateCommon(n, cache, video_info)
+                        LibScaner.updateWithYOLO(n, cache, video_info)
                     bar.update(1)
                 video_info.updatePersonList([])  # end the update
-                # print(video_info.getInfoJson())
                 if 'path_out_json' in kwargs and isinstance(kwargs['path_out_json'], str):
                     video_info.dumpInfoToJson(kwargs['path_out_json'])
                 return video_info
@@ -437,10 +530,14 @@ class LibScaner:
         rect_th = max(round(sum(canvas.shape) / 2 * 0.003), 2)
         text_th = max(rect_th - 1, 1)
         text_size = rect_th / 4
-        bbox = np.array(info.box).astype(np.int32)
-        point1 = np.array([bbox[0], bbox[1]], dtype=np.int32)
-        point2 = np.array([bbox[2], bbox[3]], dtype=np.int32)
+        box_tracker = np.array(info.box_tracker).astype(np.int32)
+        point1 = np.array([box_tracker[0], box_tracker[1]], dtype=np.int32)
+        point2 = np.array([box_tracker[2], box_tracker[3]], dtype=np.int32)
         canvas = cv2.rectangle(canvas, point1, point2, Person.getVisColor(identity), 2)
+        box_face = np.array(info.box_face).astype(np.int32)
+        point1_face = np.array([box_face[0], box_face[1]], dtype=np.int32)
+        point2_face = np.array([box_face[2], box_face[3]], dtype=np.int32)
+        canvas = cv2.rectangle(canvas, point1_face, point2_face, Person.getVisColor(identity), 1)
         label = str(identity)
         box_width, box_height = cv2.getTextSize(label, 0, fontScale=text_size, thickness=text_th)[0]
         outside = point1[1] - box_height - 3 >= 0  # label fits outside box
@@ -467,7 +564,7 @@ class LibScaner:
             iterator_list = [(person, person.getInfoIterator()) for person in video_info.person_identity_history]
             for index_frame, source in enumerate(reader):
                 canvas = LibScaner.toNdarray(source)
-                for _, (person, it) in enumerate(iterator_list):
+                for n, (person, it) in enumerate(iterator_list):
                     try:
                         info: PersonFrameInfo = it.next()
                         if info.index_frame == index_frame:

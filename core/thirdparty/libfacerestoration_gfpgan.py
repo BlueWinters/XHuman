@@ -6,7 +6,7 @@ from .. import XManager
 
 
 
-class LibFaceRestorationGFPGAN:
+class LibFaceRestorationGFPGANWrapper:
     """
     """
     @staticmethod
@@ -30,7 +30,7 @@ class LibFaceRestorationGFPGAN:
     @staticmethod
     def getResources():
         return [
-            LibFaceRestorationGFPGAN.getEngineConfig(version='1.4')['parameters'],
+            LibFaceRestorationGFPGANWrapper.getEngineConfig(version='1.4')['parameters'],
         ]
 
     """
@@ -225,11 +225,11 @@ class LibFaceRestorationGFPGAN:
         return self._returnResult(output, targets)
 
 
-class LibFaceRestorationV14(LibFaceRestorationGFPGAN):
+class LibFaceRestorationV14(LibFaceRestorationGFPGANWrapper):
     def __init__(self, *args, **kwargs):
         super(LibFaceRestorationV14, self).__init__(version='1.4')
 
 
-class LibFaceRestorationV15(LibFaceRestorationGFPGAN):
+class LibFaceRestorationV15(LibFaceRestorationGFPGANWrapper):
     def __init__(self, *args, **kwargs):
         super(LibFaceRestorationV15, self).__init__(version='1.5')

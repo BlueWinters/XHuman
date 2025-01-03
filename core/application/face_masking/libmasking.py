@@ -99,13 +99,21 @@ class LibMasking:
 
     @staticmethod
     def benchmarkOnVideo():
-        path_in_video = R'N:\archive\2024\1126-video\DanceShow2\06\input-06.mp4'
-        path_out_json = R'N:\archive\2024\1126-video\DanceShow2\06\input-06.json'
-        path_out_video = R'N:\archive\2024\1126-video\DanceShow2\06\input-06-masking.mp4'
-        # LibMasking.scanningVideo(path_in_video, fixed_num=5, path_out_json=path_out_json)
-        video_info = VideoInfo.loadVideoInfo(path_in_json=path_out_json)
-        options_dict = MaskingOption.getRandomMaskingOptionDict(video_info.person_identity_history)
-        LibMasking.maskingVideo(path_in_video, options_dict, path_out_video, path_in_json=path_out_json)
+        # easy
+        # path_in_video = R'N:\archive\2024\1126-video\DanceShow2\01\input-01.mp4'
+        # path_out_json = R'N:\archive\2024\1126-video\DanceShow2\01\input-01.json'
+        # path_out_video_scanning = R'N:\archive\2024\1126-video\DanceShow2\01\input-01-scanning.mp4'
+        # path_out_video_masking = R'N:\archive\2024\1126-video\DanceShow2\01\input-01-masking.mp4'
+        # hard
+        path_in_video = R'N:\archive\2024\1126-video\DanceShow\03\input-03.mp4'
+        path_out_json = R'N:\archive\2024\1126-video\DanceShow\03\input-03.json'
+        path_out_video_scanning = R'N:\archive\2024\1126-video\DanceShow\03\input-03-scanning.mp4'
+        path_out_video_masking = R'N:\archive\2024\1126-video\DanceShow\03\input-03-masking.mp4'
+        # pipeline
+        LibMasking.scanningVideo(path_in_video, path_out_json=path_out_json, path_out_video=path_out_video_scanning, fixed_num=4)
+        # video_info = VideoInfo.loadVideoInfo(path_in_json=path_out_json)
+        # options_dict = MaskingOption.getRandomMaskingOptionDict(video_info.person_identity_history)
+        # LibMasking.maskingVideo(path_in_video, options_dict, path_out_video_masking, path_in_json=path_out_json)
 
     """
     """
@@ -174,7 +182,8 @@ class LibMasking:
         reader = XVideoReader(path_in_video)
         writer = XVideoWriter(reader.desc(True))
         writer.open(path_video_out)
-        iterator_list = [(person, person.getInfoIterator()) for person in video_info.person_identity_history]
+        min_seconds = int(kwargs.pop('min_seconds', 1) * reader.desc()['fps'])
+        iterator_list = [(person, person.getInfoIterator()) for person in video_info.person_identity_history if len(person.frame_info_list) > min_seconds]
         with XContextTimer(True):
             with tqdm.tqdm(total=len(reader)) as bar:
                 for index_frame, bgr in enumerate(reader):
@@ -184,12 +193,17 @@ class LibMasking:
                             if info.index_frame == index_frame:
                                 if person.identity in options_dict:
                                     masking_option = options_dict[person.identity]
-                                    bgr = LibMasking.maskingSingleFace(bgr, info.box, masking_option)
+                                    if np.sum(info.box_face) == 0:
+                                        bgr = LibMasking.maskingSingleFace(bgr, it.previous().box_face, masking_option)
+                                    else:
+                                        bgr = LibMasking.maskingSingleFace(bgr, info.box_face, masking_option)
                                 it.update()
                         except IndexError as e:
+                            # print(person.identity, info.index_frame, info.box_face, str(it))
                             pass
                     writer.write(bgr)
                     bar.update(1)
+
         writer.release(reformat=True)
 
     """

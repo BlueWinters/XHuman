@@ -101,7 +101,7 @@ def getResultsFromFunctions(name, function, *args, **kwargs):
         >>> options_mosaic_polygon_small_line = (202, dict(mosaic_type='mosaic_pixel_polygon_small_line', focus_type='head'))  # 很少像素+有边界线
         >>> options_mosaic_polygon_big = (202, dict(mosaic_type='mosaic_pixel_polygon_big', focus_type='head'))  # 较多像素+没有边界线
         >>> options_mosaic_polygon_big_line = (202, dict(mosaic_type='mosaic_pixel_polygon_big_line', focus_type='head'))  # 较多像素+有边界线
-        >>> options_sticker_pure = (301, cv2.imread('path_to_sticker'))  # 纯粹的贴纸素材
+        >>> options_sticker_pure = (301, cv2.imread('path_to_sticker'))  # 纯粹的贴纸素材，4通道图
         >>> options_sticker_align = (301, dict(bgr=cv2.imread('path_to_sticker'), eyes_center=np.array(...)))  # 贴纸素材+对应的点
         >>> # 给每个人随机赋一个打码类型
         >>> for identity in list(preview_dict.keys()):
@@ -118,7 +118,8 @@ def getResultsFromFunctions(name, function, *args, **kwargs):
         >>> options_for_scanning_video['fixed_num'] = 5  # fixed_num表示固定最大人脸数量
         >>> options_for_scanning_video['num_preview'] = 1  # num_preview针对fixed_num等于-1时候，通过预览1帧来确定fixed_num；0<num_previe<=8
         >>> video_info = getResultsFromFunctions('face_masking', 'scanningVideo', path_video_input, path_out_json, **options_for_scanning_image)
-        >>> preview_dict = video_info.getIdentityPreviewDict(size=256, is_bgr=True)  # 返回dict，key是人脸id(int)，value是一张人脸图片(array)，即{int: np.ndarray}
+        >>> preview_dict = video_info.getIdentityPreviewDict(size=256, is_bgr=True)  # 返回dict，key是人脸id(int)，value是一个dict:包含box和对应帧的图片，
+        >>>                                                                          # 即{int: dict(box=box, image=np.ndarray, face=np.ndarray)}
         >>> vido_info_string_to_save = video_info.getInfoJson(True)  # 返回中间信息(str)用于保存
         >>> # 2.交互获得用户打码选择（方法同上）
         >>> # 3.获得结果
