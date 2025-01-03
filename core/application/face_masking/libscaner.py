@@ -433,9 +433,8 @@ class LibScaner:
                     lft_ear = points[4, :]
                     rig_ear = points[3, :]
                     len_ear = np.linalg.norm(lft_ear - rig_ear)
-                    lft = lft_ear[0]
-                    rig = rig_ear[0]
-
+                    lft = min(lft_ear[0], rig_ear[0])
+                    rig = max(lft_ear[0], rig_ear[0])
                     ctr_ear = (lft_ear + rig_ear) / 2
                     top = int(max(ctr_ear[1] - 0.4 * len_ear, 0))
                     bot = int(min(ctr_ear[1] + 0.6 * len_ear, h))
