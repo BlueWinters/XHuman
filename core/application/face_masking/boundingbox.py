@@ -61,7 +61,7 @@ class BoundingBox(Rectangle):
     def remapBBox(box_src, box_fmt, box_cur):
         src_lft, src_top, src_rig, src_bot = box_src
         fmt_lft, fmt_top, fmt_rig, fmt_bot = box_fmt
-        BoundingBox.assertInside(Rectangle(box_src), Rectangle(box_fmt))
+        BoundingBox.assertInside(Rectangle(np.array(box_src, dtype=np.int32)), Rectangle(np.array(box_fmt, dtype=np.int32)))
         pix_lft = src_lft - fmt_lft
         pix_rig = fmt_rig - src_rig
         pix_top = src_top - fmt_top
@@ -70,5 +70,5 @@ class BoundingBox(Rectangle):
         ratio_rig = float(pix_rig / src_rig)
         ratio_top = float(pix_top / src_top)
         ratio_bot = float(pix_bot / src_bot)
-        lft, top, rig, bot = BoundingBox(box_cur).expand4(ratio_lft, ratio_top, ratio_rig, ratio_bot).decouple()
+        lft, top, rig, bot = BoundingBox(np.array(box_cur, dtype=np.float32)).expand4(ratio_lft, ratio_top, ratio_rig, ratio_bot).decouple()
         return lft, top, rig, bot
