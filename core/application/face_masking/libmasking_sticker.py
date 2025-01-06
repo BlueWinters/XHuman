@@ -99,6 +99,27 @@ class LibMasking_Sticker:
                 bgr_copy = np.copy(bgr)
                 bgr_copy[top:bot, lft:rig, :] = fusion_bgr
                 return bgr_copy
+        if isinstance(sticker, (tuple, list)):
+            assert len(sticker) == 2, len(sticker)
+            sticker_image, sticker_box = sticker
+            lft, top, rig, bot = sticker_box
+            h = bot - top
+            w = rig - lft
+            if sticker_image.shape[2] == 3:
+                bgr_copy = np.copy(bgr)
+                bgr_copy[top:bot, lft:rig, :] = cv2.resize(sticker_image, (w, h))
+                return bgr_copy
+            if sticker_image.shape[2] == 4:
+                resized_sticker = cv2.resize(sticker_image, (w, h))
+                sticker_bgr = resized_sticker[:, :, :3]
+                sticker_mask = resized_sticker[:, :, 3:4]
+                part = bgr[top:bot, lft:rig, :]
+                mask = sticker_mask.astype(np.float32) / 255.
+                fusion = part * (1 - mask) + sticker_bgr * mask
+                fusion_bgr = np.round(fusion).astype(np.uint8)
+                bgr_copy = np.copy(bgr)
+                bgr_copy[top:bot, lft:rig, :] = fusion_bgr
+                return bgr_copy
         if isinstance(sticker, dict):
             sticker_image = sticker['bgr']
             if 'eyes_center' in sticker:

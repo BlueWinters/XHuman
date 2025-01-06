@@ -234,5 +234,5 @@ class LibMasking:
             info: PersonFrameInfo = it.next()
             if person.identity in options_dict:
                 masking_option = options_dict[person.identity]
-                bgr = LibMasking.maskingSingleFace(bgr, info.box, masking_option)
+                bgr = LibMasking.maskingSingleFace(bgr, info.box_face, masking_option)
         return bgr
