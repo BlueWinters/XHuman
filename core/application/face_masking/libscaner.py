@@ -1,3 +1,4 @@
+
 import copy
 import logging
 import os
@@ -484,7 +485,7 @@ class LibScaner:
         module = XManager.getModules('ultralytics')['yolo11m-pose']
         person_list_new = []
         # cfg_track = '{}/tracker.yaml'.format(os.path.split(__file__)[0])  # 'bytetrack.yaml'
-        result = module.track(cache.bgr, persist=True, conf=0.3, iou=0.7, classes=[0], tracker='bytetrack.yaml', verbose=False)[0]
+        result = module.track(cache.bgr, persist=True, conf=0.25, iou=0.7, classes=[0], tracker='bytetrack.yaml', verbose=False)[0]
         number = len(result)
         # num_max = min(number, video_info.person_fixed_num) if video_info.isFixedNumber else number
         cls = np.reshape(np.round(result.boxes.cls.numpy()).astype(np.int32), (-1,))
@@ -493,22 +494,21 @@ class LibScaner:
         score = np.reshape(result.boxes.conf.numpy().astype(np.float32), (-1,))
         identity = np.reshape(result.boxes.id.numpy().astype(np.int32), (-1,))
 
-        print(index_frame, number)
         # update common(tracking without lose)
         index_list = np.argsort(score)[::-1].tolist()
-        for _, n in enumerate(index_list):
+        for i, n in enumerate(index_list):
             cur_one_box_tracker = box[n, :]  # 4: lft,top,rig,bot
             cur_one_box_face = LibScaner.transformPoints2FaceBox(cache.bgr, points[n, :, :], cur_one_box_tracker)
             index = LibScaner.matchPrevious(video_info.person_list_current, int(identity[n]))
             if cls[n] != 0:
-                # index_list.pop(i)
+                index_list.remove(n)
                 continue  # only person id needed
             if index != -1:
                 person_cur = video_info.person_list_current.pop(index)
                 assert isinstance(person_cur, Person)
                 person_cur.appendInfo(index_frame, cur_one_box_tracker, cur_one_box_face)
                 person_list_new.append(person_cur)
-                # index_list.pop(i)
+                index_list.remove(n)
                 continue
 
         # update from history
