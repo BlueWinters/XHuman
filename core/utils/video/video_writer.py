@@ -18,7 +18,7 @@ class XVideoWriter:
     def reformatVideo(path_video_source, path_video_target):
         if platform.system().lower() == 'linux':
             # example: ffmpeg -i source.avi -c:v copy -c:a copy target.mp4
-            command = ['ffmpeg', '-i', path_video_source, '-codec:v', 'libx264', '-codec:a', 'aac', path_video_target]
+            command = ['ffmpeg', '-i', path_video_source, '-loglevel', 'warning', '-codec:v', 'libx264', '-codec:a', 'aac', path_video_target]
             subprocess.run(command)
             logging.warning('finish reformat with ffmpeg: {}'.format(command))
         else:

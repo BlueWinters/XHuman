@@ -138,9 +138,9 @@ class LibMasking_Sticker:
                 rig = int(min(w, rig + ww * ratio))
                 bot = int(min(h, bot + hh * ratio))
                 dst_h, dst_w = bot - top, rig - lft
-                part = bgr[top:bot, lft:rig, :]
+                part = bgr[top:bot, lft:rig, :3]
                 cache = XPortrait(part)
-                points_sticker = XPortrait(sticker_image).points[0]
+                points_sticker = XPortrait(sticker_image[:, :, :3]).points[0]
                 points_source = cache.points[0]
                 matrix = cv2.estimateAffinePartial2D(points_sticker, points_source, method=cv2.LMEDS)[0]
                 param = dict(dsize=(dst_w, dst_h), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT, borderValue=(255, 255, 255))

@@ -110,8 +110,9 @@ class Rectangle:
     def toSquare(self):
         h, w = self.height, self.width
         center_x, center_y = self.center()
-        self.x_min = center_x - w / 2
-        self.x_max = center_x + w / 2
-        self.y_min = center_y - h / 2
-        self.y_max = center_y + h / 2
+        s = (w + h) / 2
+        self.x_min = center_x - s / 2
+        self.x_max = center_x + s / 2
+        self.y_min = center_y - s / 2
+        self.y_max = center_y + s / 2
         return self

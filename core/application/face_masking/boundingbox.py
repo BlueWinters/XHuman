@@ -66,9 +66,11 @@ class BoundingBox(Rectangle):
         pix_rig = fmt_rig - src_rig
         pix_top = src_top - fmt_top
         pix_bot = fmt_bot - src_bot
-        ratio_lft = float(pix_lft / src_lft)
-        ratio_rig = float(pix_rig / src_rig)
-        ratio_top = float(pix_top / src_top)
-        ratio_bot = float(pix_bot / src_bot)
-        lft, top, rig, bot = BoundingBox(np.array(box_cur, dtype=np.float32)).expand4(ratio_lft, ratio_top, ratio_rig, ratio_bot).decouple()
+        src_h = src_bot - src_top
+        src_w = src_rig - src_lft
+        ratio_lft = float(pix_lft / src_w)
+        ratio_rig = float(pix_rig / src_w)
+        ratio_top = float(pix_top / src_h)
+        ratio_bot = float(pix_bot / src_h)
+        lft, top, rig, bot = BoundingBox(np.array(box_cur, dtype=np.float32)).expand4(ratio_lft, ratio_top, ratio_rig, ratio_bot).toSquare().decouple()
         return lft, top, rig, bot
