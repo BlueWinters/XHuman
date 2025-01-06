@@ -103,7 +103,8 @@ def getResultsFromFunctions(name, function, *args, **kwargs):
         >>> options_mosaic_polygon_big_line = (202, dict(mosaic_type='mosaic_pixel_polygon_big_line', focus_type='head'))  # 较多像素+有边界线
         >>> options_sticker_pure = (301, cv2.imread('path_to_sticker'))  # 纯粹的贴纸素材，4通道图
         >>> options_sticker_align1 = (301, dict(bgr=cv2.imread('path_to_sticker'), eyes_center=np.array(...)))  # 贴纸素材+对应的点
-        >>> options_sticker_align2 = (301, dict(bgr=cv2.imread('path_to_sticker'), box=[lft, top, rig, bot]))  # 定制卡通：贴纸素材+定制卡通裁剪框Box
+        >>> options_sticker_align2 = (301, dict(bgr=cv2.imread('path_to_sticker'), box=...))  # 定制卡通：贴纸素材+定制卡通裁剪框Box
+        >>> options_sticker_align3 = (301, dict(bgr=cv2.imread('path_to_sticker'), align=True))  # 定制卡通：贴纸素材+定制卡通（对齐方法）
         >>> # 给每个人随机赋一个打码类型
         >>> for identity in list(preview_dict.keys()):
         >>>     options = random.choice([options_blur_gaussian, options_mosaic_square, options_sticker_pure])  # 根据用户选择一个

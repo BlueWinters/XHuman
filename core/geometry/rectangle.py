@@ -11,6 +11,15 @@ class Rectangle:
         assert rectangle.x_min < rectangle.x_max, (rectangle.x_min, rectangle.x_max)
         assert rectangle.y_min < rectangle.y_max, (rectangle.y_min, rectangle.y_max)
 
+    @staticmethod
+    def assertInside(inside, outside):
+        assert isinstance(inside, Rectangle)
+        assert isinstance(outside, Rectangle)
+        assert inside.x_min >= outside.x_min, (inside.x_min, outside.x_min)
+        assert inside.x_max <= outside.x_max, (inside.x_max, outside.x_max)
+        assert inside.y_min >= outside.y_min, (inside.y_min, outside.y_min)
+        assert inside.y_max <= outside.y_max, (inside.y_max, outside.y_max)
+
     """
     """
     def __init__(self, points):

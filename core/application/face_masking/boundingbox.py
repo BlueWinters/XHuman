@@ -7,6 +7,17 @@ class BoundingBox(Rectangle):
     def __init__(self, points):
         super(BoundingBox, self).__init__(points)
 
+    def expand4(self, ratio_lft: float, ratio_top: float, ratio_rig: float, ratio_bot: float):
+        assert ratio_lft > 0 and ratio_rig > 0, (ratio_lft, ratio_rig)
+        assert ratio_top > 0 and ratio_bot > 0, (ratio_top, ratio_bot)
+        w = self.width
+        h = self.height
+        self.x_min = self.x_min - w * ratio_lft
+        self.x_max = self.x_max + w * ratio_top
+        self.y_min = self.y_min - h * ratio_rig
+        self.y_max = self.y_max + h * ratio_bot
+        return self
+
     @staticmethod
     def iou(a, b) -> float:
         assert isinstance(a, BoundingBox)
@@ -46,3 +57,18 @@ class BoundingBox(Rectangle):
                 idx_max = n
         return idx_max, iou_max
 
+    @staticmethod
+    def remapBBox(box_src, box_fmt, box_cur):
+        src_lft, src_top, src_rig, src_bot = box_src
+        fmt_lft, fmt_top, fmt_rig, fmt_bot = box_fmt
+        BoundingBox.assertInside(Rectangle(box_src), Rectangle(box_fmt))
+        pix_lft = src_lft - fmt_lft
+        pix_rig = fmt_rig - src_rig
+        pix_top = src_top - fmt_top
+        pix_bot = fmt_bot - src_bot
+        ratio_lft = float(pix_lft / src_lft)
+        ratio_rig = float(pix_rig / src_rig)
+        ratio_top = float(pix_top / src_top)
+        ratio_bot = float(pix_bot / src_bot)
+        lft, top, rig, bot = BoundingBox(box_cur).expand4(ratio_lft, ratio_top, ratio_rig, ratio_bot).decouple()
+        return lft, top, rig, bot

@@ -4,6 +4,7 @@ import os
 import cv2
 import numpy as np
 import tqdm
+from .boundingbox import BoundingBox
 from ...base import XPortrait
 from ...utils.context import XContextTimer
 from ...utils.video import XVideoReader, XVideoWriter
@@ -126,26 +127,48 @@ class LibMasking_Sticker:
                 bgr_copy = np.copy(bgr)
                 bgr_copy[top:bot, lft:rig, :] = fusion_bgr
                 return bgr_copy
+            if 'align' in sticker:
+                ratio = 0.5
+                h, w, c = bgr.shape
+                lft, top, rig, bot = box
+                hh = bot - top
+                ww = rig - lft
+                lft = int(max(0, lft - ww * ratio))
+                top = int(max(0, top - hh * ratio))
+                rig = int(min(w, rig + ww * ratio))
+                bot = int(min(h, bot + hh * ratio))
+                dst_h, dst_w = bot - top, rig - lft
+                part = bgr[top:bot, lft:rig, :]
+                cache = XPortrait(part)
+                points_sticker = XPortrait(sticker_image).points[0]
+                points_source = cache.points[0]
+                matrix = cv2.estimateAffinePartial2D(points_sticker, points_source, method=cv2.LMEDS)[0]
+                param = dict(dsize=(dst_w, dst_h), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT, borderValue=(255, 255, 255))
+                sticker_warped = cv2.warpAffine(sticker_image, matrix, **param)
+                sticker_warped_bgr, sticker_warped_alpha = sticker_warped[:, :, :3], sticker_warped[:, :, 3:4]
+                mask = sticker_warped_alpha.astype(np.float32) / 255.
+                fusion = part * (1 - mask) + sticker_warped_bgr * mask
+                fusion_bgr = np.round(fusion).astype(np.uint8)
+                bgr_copy = np.copy(bgr)
+                bgr_copy[top:bot, lft:rig, :] = fusion_bgr
+                return bgr_copy
             if 'box' in sticker:
-                sticker_box = sticker['box']
-                lft, top, rig, bot = sticker_box
+                H, W, C = bgr.shape
+                box_src, box_fmt = sticker['box']
+                box_remap = BoundingBox.remapBBox(box_src, box_fmt, box)
+                lft, top, rig, bot = BoundingBox(box_remap).clip(0, 0, W, H).decouple()
                 h = bot - top
                 w = rig - lft
-                if sticker_image.shape[2] == 3:
-                    bgr_copy = np.copy(bgr)
-                    bgr_copy[top:bot, lft:rig, :] = cv2.resize(sticker_image, (w, h))
-                    return bgr_copy
-                if sticker_image.shape[2] == 4:
-                    resized_sticker = cv2.resize(sticker_image, (w, h))
-                    sticker_bgr = resized_sticker[:, :, :3]
-                    sticker_mask = resized_sticker[:, :, 3:4]
-                    part = bgr[top:bot, lft:rig, :]
-                    mask = sticker_mask.astype(np.float32) / 255.
-                    fusion = part * (1 - mask) + sticker_bgr * mask
-                    fusion_bgr = np.round(fusion).astype(np.uint8)
-                    bgr_copy = np.copy(bgr)
-                    bgr_copy[top:bot, lft:rig, :] = fusion_bgr
-                    return bgr_copy
+                resized_sticker = cv2.resize(sticker_image, (w, h))
+                sticker_bgr = resized_sticker[:, :, :3]
+                sticker_mask = resized_sticker[:, :, 3:4]
+                part = bgr[top:bot, lft:rig, :]
+                mask = sticker_mask.astype(np.float32) / 255.
+                fusion = part * (1 - mask) + sticker_bgr * mask
+                fusion_bgr = np.round(fusion).astype(np.uint8)
+                bgr_copy = np.copy(bgr)
+                bgr_copy[top:bot, lft:rig, :] = fusion_bgr
+                return bgr_copy
 
     """
     """

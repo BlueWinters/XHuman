@@ -42,14 +42,20 @@ class LibHeadPose:
         return bgr
 
     @staticmethod
-    def visual(bgr, radians, landmarks):
-        for radian, points in zip(radians, landmarks):
-            yaw, pitch, roll = (radian.astype(np.float32) * 180 / np.pi).tolist()
-            cx, cy = np.mean(points, axis=0).round().astype(np.int32).tolist()
-            size = (np.max(points[:, 0]) - np.min(points[:, 0]) +
-                    np.max(points[:, 1]) - np.min(points[:, 1])) / 2
-            LibHeadPose.plot_axis(bgr, yaw, pitch, roll, cx=cx, cy=cy, size=int(round(size/3)))
+    def visual(bgr, radian, points):
+        yaw, pitch, roll = (radian.astype(np.float32) * 180 / np.pi).tolist()
+        cx, cy = np.mean(points, axis=0).round().astype(np.int32).tolist()
+        size = (np.max(points[:, 0]) - np.min(points[:, 0]) +
+                np.max(points[:, 1]) - np.min(points[:, 1])) / 2
+        LibHeadPose.plot_axis(bgr, yaw, pitch, roll, cx=cx, cy=cy, size=int(round(size/3)))
         return bgr
+        # for radian, points in zip(radians, landmarks):
+        #     yaw, pitch, roll = (radian.astype(np.float32) * 180 / np.pi).tolist()
+        #     cx, cy = np.mean(points, axis=0).round().astype(np.int32).tolist()
+        #     size = (np.max(points[:, 0]) - np.min(points[:, 0]) +
+        #             np.max(points[:, 1]) - np.min(points[:, 1])) / 2
+        #     LibHeadPose.plot_axis(bgr, yaw, pitch, roll, cx=cx, cy=cy, size=int(round(size/3)))
+        # return bgr
 
     @staticmethod
     def getResources():
