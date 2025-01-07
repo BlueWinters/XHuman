@@ -8,4 +8,4 @@ from .human_matting.libhumanmatting_devkit import LibHumanMatting_DevKit as LibH
 from .human_matting.libhumanmatting_sghm import LibHumanMatting_SGHM as LibHumanMatting_SGHM
 from .human_matting.libhumanfinematting import LibHumanFineMatting as LibHumanFineMatting
 from .libfunction import LibFunction as LibFunction
-from .cache import XCache, XPortrait, XPortraitR, XPortraitHelper
+from .cache import XCache, XPortrait, XPortraitR, XPortraitHelper, XPortraitExceptionAssert
