@@ -181,7 +181,8 @@ class LibMasking_Blur:
         return np.round(fusion).astype(np.uint8)
 
     @staticmethod
-    def inferenceWithBox(bgr, box, parameters):
+    def inferenceWithBox(bgr, box, masking_option):
+        parameters = masking_option.parameters
         blur_type = parameters['blur_type']
         focus_type = parameters['focus_type']
         if blur_type == 'blur_gaussian':

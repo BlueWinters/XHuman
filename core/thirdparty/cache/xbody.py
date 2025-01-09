@@ -24,9 +24,9 @@ class XBody(XCache):
     """
     """
     @staticmethod
-    def setBackend(backend):
-        assert backend in ['rtmlib', 'ultralytics'], backend
-        XBody.Backend = backend
+    def setDefaultBackend(backend):
+        assert 'rtmlib' == backend or 'ultralytics' in backend, backend
+        XBody.DefaultBackend = backend
 
     @staticmethod
     def packageAsCache(source, **kwargs):
@@ -48,13 +48,14 @@ class XBody(XCache):
     """
     PropertyReadOnly = True
     ThresholdVisualPoints26 = 0.3
-    Backend = 'rtmlib'
+    DefaultBackend = 'rtmlib'
 
     """
     """
     def __init__(self, bgr, **kwargs):
         super(XBody, self).__init__(bgr=bgr)
         self.url = kwargs.pop('url', '127.0.0.0')
+        self.backend = kwargs.pop('backend', self.DefaultBackend)
         # strategy: 'area', 'score', 'pose
         self.strategy = kwargs.pop('strategy', 'area')
         assert self.strategy in ['area', 'score'], self.strategy
@@ -133,7 +134,7 @@ class XBody(XCache):
         raise NotImplementedError('no such sorting strategy: {}'.format(strategy))
 
     def _detectBoxes(self, bgr):
-        if self.Backend == 'rtmlib':
+        if self.backend == 'rtmlib':
             scores, boxes = self._getModule('human_detection_yolox')(bgr, targets='source')
             scores, boxes = self._resort(self.strategy, scores, boxes)
             if self.asserting is True:
@@ -142,12 +143,13 @@ class XBody(XCache):
             self._number = len(scores)
             self._score = np.reshape(scores.astype(np.float32), (-1,))
             self._box = np.reshape(np.round(boxes).astype(np.int32), (-1, 4,))
-        if self.Backend == 'ultralytics':
-            module = self._getModule('ultralytics').getSpecific('yolo11n')
-            result = module(bgr, persist=False)[0]
+        if 'ultralytics' in self.backend:
+            name = self.backend.split('.')[1]  # example: 'ultralytics.yolo11n-pose' ==> ultralytics.{LibUltralyticsWrapper.ModelList[n]}
+            module = self._getModule('ultralytics')[name]
+            result = module(bgr)[0]
             self._number = len(result)
-            self._score = np.reshape(result.boxes.conf.numpy().astype(np.float32), (-1,))
-            self._box = np.reshape(np.round(result.boxes.xyxy.numpy()).astype(np.int32), (-1, 4,))
+            self._score = np.reshape(result.boxes.conf.cpu().numpy().astype(np.float32), (-1,))
+            self._box = np.reshape(np.round(result.boxes.xyxy.cpu().numpy()).astype(np.int32), (-1, 4,))
 
     @property
     def number(self):
@@ -167,7 +169,7 @@ class XBody(XCache):
             self._detectBoxes(self.bgr)
         return self._box
 
-    def _detectPose(self):
+    def _detectPoseWithRTMPose(self):
         points26, scores26 = self._getModule('rtmpose')(self.bgr, boxes=self.box)
         self._points26 = np.reshape(np.array(points26, dtype=np.int32), (-1, 26, 2))
         self._scores26 = np.reshape(np.array(scores26, dtype=np.float32), (-1, 26))
@@ -175,13 +177,13 @@ class XBody(XCache):
     @property
     def points26(self):
         if not hasattr(self, '_points26'):
-            self._detectPose()
+            self._detectPoseWithRTMPose()
         return self._points26
 
     @property
     def scores26(self):
         if not hasattr(self, '_scores26'):
-            self._detectPose()
+            self._detectPoseWithRTMPose()
         return self._scores26
 
     @property

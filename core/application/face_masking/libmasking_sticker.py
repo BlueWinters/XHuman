@@ -73,7 +73,8 @@ class LibMasking_Sticker:
                 bar.update(1)
 
     @staticmethod
-    def inferenceWithBox(bgr, box, sticker):
+    def inferenceWithBox(bgr, box, masking_option):
+        sticker = masking_option.parameters
         if isinstance(sticker, np.ndarray):
             assert sticker.shape[2] == 3 or sticker.shape[2] == 4, sticker.shape[2]
             lft, top, rig, bot = box
@@ -155,10 +156,13 @@ class LibMasking_Sticker:
             if 'box' in sticker:
                 H, W, C = bgr.shape
                 box_src, box_fmt = sticker['box']
+                # box_src = copy.deepcopy(box)
                 box_remap = BoundingBox.remapBBox(box_src, box_fmt, box)
                 lft, top, rig, bot = BoundingBox(np.array(box_remap, dtype=np.int32)).clip(0, 0, W, H).decouple()
                 h = bot - top
                 w = rig - lft
+                st_x, st_y, st_w, st_h = cv2.boundingRect(sticker_image[:, :, 3])
+                sticker_image = sticker_image[st_y:st_y + st_h, st_x:st_x + st_w, ...]
                 resized_sticker = cv2.resize(sticker_image, (w, h))
                 sticker_bgr = resized_sticker[:, :, :3]
                 sticker_mask = resized_sticker[:, :, 3:4]

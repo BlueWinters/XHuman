@@ -136,9 +136,9 @@ class XVideoHelper:
         assert axis == 0 or axis == 1
         reader_list = list()
         config = None
-        for path_in in path_in_list:
+        for n, path_in in enumerate(path_in_list):
             reader = XVideoReader(path_in)
-            assert reader.isOpen()
+            assert reader.isOpen(), 'open video fail: {}'.format(path_in)
             if config is not None:
                 current = reader.desc(True)
                 assert config['h'] == current['h']

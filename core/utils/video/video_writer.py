@@ -31,6 +31,17 @@ class XVideoWriter:
         return path_video_target
 
     @staticmethod
+    def visualFrameNumber(bgr, n:int, color=(255, 255, 255)):
+        h, w, c = bgr.shape
+        rect_th = max(round((w + h) / 2 * 0.003), 2)
+        text_th = max(rect_th - 1, 2)
+        text_size = rect_th / 4
+        points_x = int(w * 0.05)
+        points_y = points_x
+        cv2.putText(bgr, str(n), (points_x, points_y), 0, text_size, color, thickness=text_th)
+        return bgr
+
+    @staticmethod
     def default_fourcc():
         return 'X', 'V', 'I', 'D'
 
@@ -55,6 +66,7 @@ class XVideoWriter:
     """
     """
     def __init__(self, config: dict):
+        self.counter = 0
         self._config(config)
 
     def __del__(self):
@@ -71,6 +83,8 @@ class XVideoWriter:
             self.h = config['h']
         else:
             self.w = self.h = -1
+        # visual frame index
+        self.visual_index = bool(config['visual_index'] if 'visual_index' in config else False)
 
     @staticmethod
     def _getOpencvWriter(path, fps, w, h, fourcc):
@@ -129,6 +143,9 @@ class XVideoWriter:
         if self.h == -1 or self.w == -1:
             self.h, self.w = image.shape[:2]
         assert self.h == image.shape[0] and self.w == image.shape[1], (self.h, self.w, image.shape)
+        self.counter += 1
+        if self.visual_index is True:
+            image = self.visualFrameNumber(np.copy(image), self.counter)
         self.writer(image)
 
     def dump(self, bgr_list:List[np.ndarray]):

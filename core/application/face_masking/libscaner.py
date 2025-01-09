@@ -84,6 +84,9 @@ class Person:
                     r = 1. - float(n / (copy_length+1))
                     info_cur.box_face = (r * info_head.box_face + (1 - r) * info_tail.box_face).astype(np.int32)
                     info_cur.box_copy = False
+            if info1.box_copy is True and info2.box_copy is True:
+                r = 0.5
+                info1.box_face = (r * info2.box_face + (1 - r) * info1.box_face).astype(np.int32)
 
     def appendInfo(self, index_frame, box_tracker, box_face):
         # TODO: interpolate frame info
@@ -355,130 +358,54 @@ class LibScaner:
         h, w, c = bgr.shape
         confidence = key_points[:, 2].astype(np.float32)
         points = key_points[:, :2].astype(np.float32)
-        if confidence[0] > threshold:
-            if confidence[3] > threshold and confidence[4] > threshold:
-                lft_ear = points[4, :]
-                rig_ear = points[3, :]
-                len_ear = np.linalg.norm(lft_ear - rig_ear)
-                lft = min(lft_ear[0], rig_ear[0])
-                rig = max(lft_ear[0], rig_ear[0])
-                nose = points[0, :]
-                top = int(max(nose[1] - 0.4*len_ear, 0))
-                bot = int(min(nose[1] + 0.6*len_ear, h))
-                # return np.array([lft, top, rig, bot], dtype=np.int32)
+        if confidence[3] > threshold and confidence[4] > threshold:
+            lft_ear = points[4, :]
+            rig_ear = points[3, :]
+            len_ear = np.linalg.norm(lft_ear - rig_ear)
+            lft = min(lft_ear[0], rig_ear[0])
+            rig = max(lft_ear[0], rig_ear[0])
+            ctr_ear = (lft_ear + rig_ear) / 2
+            top = int(max(ctr_ear[1] - 0.4 * len_ear, 0))
+            bot = int(min(ctr_ear[1] + 0.6 * len_ear, h))
+            bbox = BoundingBox(np.array([lft, top, rig, bot], dtype=np.int32)).toSquare().clip(0, 0, w, h).asInt()
+            return np.array(bbox, dtype=np.int32)
+        if confidence[3] > threshold and confidence[1] > threshold:
+            rig = points[3, 0]  # points[1, 0] < points[3, 0]
+            if confidence[2] > threshold:
+                assert confidence[0] > threshold, confidence[0]
+                rig_ratio = float(rig - points[1, 0]) / float(rig - points[0, 0])
+                lft = points[2, 0] - float(rig - points[0, 0]) * (1 - rig_ratio)
+                len_c2rig = rig - points[0, 0]
+                top = int(max(points[0, 1] - 0.4 * len_c2rig, 0))
+                bot = int(min(points[0, 1] + 0.8 * len_c2rig, h))
                 bbox = BoundingBox(np.array([lft, top, rig, bot], dtype=np.int32)).toSquare().clip(0, 0, w, h).asInt()
                 return np.array(bbox, dtype=np.int32)
-            else:
-                if confidence[1] > threshold and confidence[2] > threshold:
-                    lft_eye = points[2, :]
-                    rig_eye = points[1, :]
-                    len_eye = np.linalg.norm(lft_eye - rig_eye)
-                    lft = min(lft_eye[0], rig_eye[0])
-                    rig = max(lft_eye[0], rig_eye[0])
-                    lft = int(max(lft - 0.5*len_eye, 0))
-                    rig = int(min(rig + 0.5*len_eye, w))
-                    if confidence[3] > threshold:
-                        lft = min(lft, points[3, 0])
-                        rig = max(rig, points[3, 0])
-                    if confidence[4] > threshold:
-                        lft = min(lft, points[4, 0])
-                        rig = max(rig, points[4, 0])
-                    len_lft2rig = rig - lft
-                    nose = points[0, :]
-                    top = int(max(nose[1] - 0.4*len_lft2rig, 0))
-                    bot = int(min(nose[1] + 0.6*len_lft2rig, h))
-                    # return np.array([lft, top, rig, bot], dtype=np.int32)
-                    bbox = BoundingBox(np.array([lft, top, rig, bot], dtype=np.int32)).toSquare().clip(0, 0, w, h).asInt()
-                    return np.array(bbox, dtype=np.int32)
-                else:
-                    lft = copy.deepcopy(points[0, 0])
-                    rig = copy.deepcopy(points[0, 0])
-                    if confidence[1] > threshold and confidence[3] > threshold:
-                        lft = min(lft, points[1, 0])
-                        lft = min(lft, points[3, 0])
-                        rig = max(rig, points[1, 0])
-                        rig = max(rig, points[3, 0])
-                        len_lft2rig = rig - lft
-                        nose = points[0, :]
-                        top = int(max(nose[1] - 0.4 * len_lft2rig, 0))
-                        bot = int(min(nose[1] + 0.6 * len_lft2rig, h))
-                        # return np.array([lft, top, rig, bot], dtype=np.int32)
-                        bbox = BoundingBox(np.array([lft, top, rig, bot], dtype=np.int32)).toSquare().clip(0, 0, w, h).asInt()
-                        return np.array(bbox, dtype=np.int32)
-                    if confidence[2] > threshold and confidence[4] > threshold:
-                        lft = min(lft, points[2, 0])
-                        lft = min(lft, points[4, 0])
-                        rig = max(rig, points[2, 0])
-                        rig = max(rig, points[4, 0])
-                        len_lft2rig = rig - lft
-                        nose = points[0, :]
-                        top = int(max(nose[1] - 0.4 * len_lft2rig, 0))
-                        bot = int(min(nose[1] + 0.6 * len_lft2rig, h))
-                        # return np.array([lft, top, rig, bot], dtype=np.int32)
-                        bbox = BoundingBox(np.array([lft, top, rig, bot], dtype=np.int32)).toSquare().clip(0, 0, w, h).asInt()
-                        return np.array(bbox, dtype=np.int32)
-                    return np.array([0, 0, 0, 0], dtype=np.int32)
-        else:
-            if confidence[1] > threshold and confidence[2] > threshold:
-                lft_eye = points[2, :]
-                rig_eye = points[1, :]
-                len_eye = np.linalg.norm(lft_eye - rig_eye)
-                lft = min(lft_eye[0], rig_eye[0])
-                rig = max(lft_eye[0], rig_eye[0])
-                lft = int(max(lft - 0.5 * len_eye, 0))
-                rig = int(min(rig + 0.5 * len_eye, w))
-                if confidence[3] > threshold:
-                    lft = min(lft, points[3, 0])
-                    rig = max(rig, points[3, 0])
-                if confidence[4] > threshold:
-                    lft = min(lft, points[4, 0])
-                    rig = max(rig, points[4, 0])
-                len_lft2rig = rig - lft
-                ctr_eye = (lft_eye + rig_eye) / 2
-                top = int(max(ctr_eye[1] - 0.1 * len_lft2rig, 0))
-                bot = int(min(ctr_eye[1] + 0.9 * len_lft2rig, h))
-                # return np.array([lft, top, rig, bot], dtype=np.int32)
+            if confidence[0] > threshold:
+                lft = points[0, 0] - abs(points[0, 0] - points[1, 0])  # min(lft, points[0, 0])
+                len_c2rig = rig - points[0, 0]
+                top = int(max(points[0, 1] - 0.4 * len_c2rig, 0))
+                bot = int(min(points[0, 1] + 0.8 * len_c2rig, h))
                 bbox = BoundingBox(np.array([lft, top, rig, bot], dtype=np.int32)).toSquare().clip(0, 0, w, h).asInt()
                 return np.array(bbox, dtype=np.int32)
-            else:
-                if confidence[3] > threshold and confidence[4] > threshold:
-                    lft_ear = points[4, :]
-                    rig_ear = points[3, :]
-                    len_ear = np.linalg.norm(lft_ear - rig_ear)
-                    lft = min(lft_ear[0], rig_ear[0])
-                    rig = max(lft_ear[0], rig_ear[0])
-                    ctr_ear = (lft_ear + rig_ear) / 2
-                    top = int(max(ctr_ear[1] - 0.4 * len_ear, 0))
-                    bot = int(min(ctr_ear[1] + 0.6 * len_ear, h))
-                    # return np.array([lft, top, rig, bot], dtype=np.int32)
-                    bbox = BoundingBox(np.array([lft, top, rig, bot], dtype=np.int32)).toSquare().clip(0, 0, w, h).asInt()
-                    return np.array(bbox, dtype=np.int32)
-                else:
-                    if confidence[1] > threshold and confidence[3] > threshold:
-                        lft = points[1, 0]
-                        lft = min(lft, points[3, 0])
-                        rig = points[1, 0]
-                        rig = max(rig, points[3, 0])
-                        len_lft2rig = rig - lft
-                        cy = (points[1, 1] + points[3, 1]) / 2
-                        top = int(max(cy - 0.4 * len_lft2rig, 0))
-                        bot = int(min(cy + 0.6 * len_lft2rig, h))
-                        # return np.array([lft, top, rig, bot], dtype=np.int32)
-                        bbox = BoundingBox(np.array([lft, top, rig, bot], dtype=np.int32)).expand(0.2, 0.2).toSquare().clip(0, 0, w, h).asInt()
-                        return np.array(bbox, dtype=np.int32)
-                    if confidence[2] > threshold and confidence[4] > threshold:
-                        lft = points[2, 0]
-                        lft = min(lft, points[4, 0])
-                        rig = points[2, 0]
-                        rig = max(rig, points[4, 0])
-                        len_lft2rig = rig - lft
-                        cy = (points[2, 1] + points[4, 1]) / 2
-                        top = int(max(cy - 0.4 * len_lft2rig, 0))
-                        bot = int(min(cy + 0.6 * len_lft2rig, h))
-                        # return np.array([lft, top, rig, bot], dtype=np.int32)
-                        bbox = BoundingBox(np.array([lft, top, rig, bot], dtype=np.int32)).expand(0.2, 0.2).toSquare().clip(0, 0, w, h).asInt()
-                        return np.array(bbox, dtype=np.int32)
-                    return np.array([0, 0, 0, 0], dtype=np.int32)
+        if confidence[4] > threshold and confidence[2] > threshold:
+            lft = points[4, 0]
+            if confidence[1] > threshold:
+                assert confidence[0] > threshold, confidence[0]
+                lft_ratio = float(points[2, 0]-lft) / float(points[0, 0]-lft)
+                rig = points[1, 0] + float(points[0, 0] - lft) * (1 - lft_ratio)
+                len_c2lft = points[0, 0] - lft
+                top = int(max(points[0, 1] - 0.4 * len_c2lft, 0))
+                bot = int(min(points[0, 1] + 0.8 * len_c2lft, h))
+                bbox = BoundingBox(np.array([lft, top, rig, bot], dtype=np.int32)).toSquare().clip(0, 0, w, h).asInt()
+                return np.array(bbox, dtype=np.int32)
+            if confidence[0] > threshold:
+                rig = points[0, 0] + abs(points[2, 0] - points[0, 0])  # min(lft, points[0, 0])
+                len_c2lft = points[0, 0] - lft
+                top = int(max(points[0, 1] - 0.4 * len_c2lft, 0))
+                bot = int(min(points[0, 1] + 0.8 * len_c2lft, h))
+                bbox = BoundingBox(np.array([lft, top, rig, bot], dtype=np.int32)).toSquare().clip(0, 0, w, h).asInt()
+                return np.array(bbox, dtype=np.int32)
+        return np.array([0, 0, 0, 0], dtype=np.int32)
 
     @staticmethod
     def updateWithYOLO(index_frame, cache, video_info: VideoInfo):
@@ -490,7 +417,7 @@ class LibScaner:
         # num_max = min(number, video_info.person_fixed_num) if video_info.isFixedNumber else number
         cls = np.reshape(np.round(result.boxes.cls.numpy()).astype(np.int32), (-1,))
         box = np.reshape(np.round(result.boxes.xyxy.numpy()).astype(np.int32), (-1, 4,))
-        points = np.reshape(np.round(result.keypoints.data.cpu().numpy()).astype(np.float32), (-1, 17, 3))
+        points = np.reshape(result.keypoints.data.cpu().numpy().astype(np.float32), (-1, 17, 3))
         score = np.reshape(result.boxes.conf.numpy().astype(np.float32), (-1,))
         identity = np.reshape(result.boxes.id.numpy().astype(np.int32), (-1,))
 
@@ -544,7 +471,7 @@ class LibScaner:
         #     video_info.person_fixed_num = len(video_info.person_identity_history)
 
     @staticmethod
-    def inference(reader_iterator, **kwargs) -> VideoInfo:
+    def inferenceOnVideo(reader_iterator, **kwargs) -> VideoInfo:
         with XContextTimer(True) as context:
             with tqdm.tqdm(total=len(reader_iterator)) as bar:
                 sample_step = kwargs.pop('sample_step', 1)
@@ -560,6 +487,17 @@ class LibScaner:
                 if 'path_out_json' in kwargs and isinstance(kwargs['path_out_json'], str):
                     video_info.dumpInfoToJson(kwargs['path_out_json'])
                 return video_info
+
+    @staticmethod
+    def inferenceOnImage(source, **kwargs):
+        with XContextTimer(True) as context:
+            cache = LibScaner.packageAsCache(source)
+            video_info = VideoInfo(fixed_num=-1)
+            LibScaner.updateCommon(0, cache, video_info)
+            video_info.updatePersonList([])  # end the update
+            if 'path_out_json' in kwargs and isinstance(kwargs['path_out_json'], str):
+                video_info.dumpInfoToJson(kwargs['path_out_json'])
+            return video_info
 
     """
     """
@@ -589,7 +527,7 @@ class LibScaner:
     @staticmethod
     def visualFrameNumber(canvas, n):
         h, w, c = canvas.shape
-        rect_th = max(round((w+w) / 2 * 0.003), 2)
+        rect_th = max(round((w+h) / 2 * 0.003), 2)
         text_th = max(rect_th - 1, 2)
         text_size = rect_th / 4
         points_x = int(w * 0.05)
