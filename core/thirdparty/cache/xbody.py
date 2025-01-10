@@ -138,7 +138,6 @@ class XBody(XCache):
             scores, boxes = self._getModule('human_detection_yolox')(bgr, targets='source')
             scores, boxes = self._resort(self.strategy, scores, boxes)
             if self.asserting is True:
-                # XPortraitExceptionAssert.assertNoFace(len(scores))
                 pass
             self._number = len(scores)
             self._score = np.reshape(scores.astype(np.float32), (-1,))
@@ -146,7 +145,7 @@ class XBody(XCache):
         if 'ultralytics' in self.backend:
             name = self.backend.split('.')[1]  # example: 'ultralytics.yolo11n-pose' ==> ultralytics.{LibUltralyticsWrapper.ModelList[n]}
             module = self._getModule('ultralytics')[name]
-            result = module(bgr)[0]
+            result = module(bgr, verbose=False)[0]
             self._number = len(result)
             self._score = np.reshape(result.boxes.conf.cpu().numpy().astype(np.float32), (-1,))
             self._box = np.reshape(np.round(result.boxes.xyxy.cpu().numpy()).astype(np.int32), (-1, 4,))

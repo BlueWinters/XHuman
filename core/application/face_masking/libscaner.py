@@ -480,8 +480,8 @@ class LibScaner:
                 for n, source in enumerate(reader_iterator):
                     if n % sample_step == 0:
                         cache = LibScaner.packageAsCache(source)
-                        LibScaner.updateCommon(n, cache, video_info)
-                        # LibScaner.updateWithYOLO(n, cache, video_info)
+                        # LibScaner.updateCommon(n, cache, video_info)
+                        LibScaner.updateWithYOLO(n, cache, video_info)
                     bar.update(1)
                 video_info.updatePersonList([])  # end the update
                 if 'path_out_json' in kwargs and isinstance(kwargs['path_out_json'], str):

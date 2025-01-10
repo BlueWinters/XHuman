@@ -7,7 +7,7 @@ import cv2
 import numpy as np
 import tqdm
 from .libscaner import *
-# from .masking_option import MaskingOption
+from .masking_option import MaskingOption
 from .libmasking_blur import LibMasking_Blur
 from .libmasking_mosaic import LibMasking_Mosaic
 from .libmasking_sticker import LibMasking_Sticker
@@ -16,75 +16,6 @@ from ...utils.context import XContextTimer
 from ...utils.video import XVideoReader, XVideoWriter
 from ...utils.resource import Resource
 from ... import XManager
-
-
-class MaskingOption:
-    """
-    """
-    MaskingOption_Blur = [101, 102, 103, 104, 105]
-    MaskingOption_Mosaic = [201, 202]
-    MaskingOption_Sticker = [301]
-
-    @staticmethod
-    def packageAsBlur():
-        seed = random.randint(0, 10) % 5
-        seed = random.choice([0, 4])
-        if seed == 0:
-            return MaskingOption(101, dict(blur_type='blur_gaussian', focus_type='head'))
-        if seed == 1:
-            return MaskingOption(102, dict(blur_type='blur_motion', focus_type='head'))
-        if seed == 2:
-            return MaskingOption(103, dict(blur_type='blur_water', focus_type='head'))
-        if seed == 3:
-            return MaskingOption(103, dict(blur_type='blur_pencil', focus_type='head'))
-        if seed == 4:
-            return MaskingOption(103, dict(blur_type='blur_diffuse', focus_type='head'))
-
-    @staticmethod
-    def packageAsMosaic():
-        seed = random.randint(0, 10) % 2
-        seed = 1
-        if seed == 0:
-            return MaskingOption(201, dict(mosaic_type='mosaic_pixel_square', focus_type='head'))
-        if seed == 1:
-            return MaskingOption(202, dict(mosaic_type='mosaic_pixel_polygon', focus_type='head'))
-
-    @staticmethod
-    def packageAsSticker():
-        seed = 1#random.randint(0, 10) % 2
-        if seed == 0:
-            index = random.randint(0, 14)
-            path = '{}/resource/sticker/cartoon/{:02d}.png'.format(os.path.split(__file__)[0], index)
-            sticker_bgr = Resource.loadImage(path)
-            return MaskingOption(301, sticker_bgr)
-        if seed == 1:
-            sticker = cv2.imread('{}/resource/sticker/retro/01.png'.format(os.path.split(__file__)[0]), cv2.IMREAD_UNCHANGED)
-            points = np.array([[88, 227], [190, 227]], dtype=np.int32)
-            return MaskingOption(301, dict(bgr=sticker, eyes_center=points))
-
-    @staticmethod
-    def package():
-        code = random.choice([0,])
-        return [MaskingOption.packageAsBlur,
-                MaskingOption.packageAsMosaic,
-                MaskingOption.packageAsSticker][code]()
-
-    @staticmethod
-    def getRandomMaskingOptionDict(person_list):
-        options_dict = dict()
-        for n, person in enumerate(person_list):
-            options_dict[person.identity] = MaskingOption.package()
-            print(person.identity, options_dict[person.identity].option_code)
-        return options_dict
-
-    """
-    """
-    def __init__(self, option_code, parameters):
-        self.option_code = option_code
-        self.parameters = parameters
-
-    def __str__(self):
-        return '{} --> {}'.format(self.option_code, self.parameters)
 
 
 class LibMasking:
@@ -114,31 +45,31 @@ class LibMasking:
         # easy
         # path_in_video = R'N:\archive\2024\1126-video\DanceShow2\01\input-01.mp4'
         # path_out_json = R'N:\archive\2024\1126-video\DanceShow2\01\common\input-01_yolo.json'
-        # path_out_video_scanning = R'N:\archive\2024\1126-video\DanceShow2\01\common\input-01-scanning_yolo.mp4'
-        # path_out_video_masking = R'N:\archive\2024\1126-video\DanceShow2\01\common\input-01-masking_yolo.mp4'
+        # path_out_video_scanning = R'N:\archive\2024\1126-video\DanceShow2\01\common\input-01-scanning.mp4'
+        # path_out_video_masking = R'N:\archive\2024\1126-video\DanceShow2\01\common\input-01-masking.mp4'
         # hard
-        # path_in_video = R'N:\archive\2024\1126-video\DanceShow\03\input-03.mp4'
-        # path_out_json = R'N:\archive\2024\1126-video\DanceShow\03\input-03.json'
-        # path_out_video_scanning = R'N:\archive\2024\1126-video\DanceShow\03\input-03-scanning.mp4'
-        # path_out_video_masking = R'N:\archive\2024\1126-video\DanceShow\03\input-03-masking_mosaic_pixel_polygon.mp4'
+        path_in_video = R'N:\archive\2024\1126-video\DanceShow2\01\input-01.mp4'
+        path_out_json = R'N:\archive\2024\1126-video\DanceShow2\01\test\input-01_yolo.json'
+        path_out_video_scanning = R'N:\archive\2024\1126-video\DanceShow2\01\test\input-01-scanning_yolo.mp4'
+        path_out_video_masking = R'N:\archive\2024\1126-video\DanceShow2\01\test\input-01-masking_yolo.mp4'
 
         # pipeline
-        # video_info = LibMasking.scanningVideo(path_in_video, path_out_json=path_out_json, path_out_video=path_out_video_scanning)
+        video_info = LibMasking.scanningVideo(path_in_video, path_out_json=path_out_json, path_out_video=path_out_video_scanning)
         # video_info = VideoInfo.loadVideoInfo(path_in_json=path_out_json)
-        # options_dict = MaskingOption.getRandomMaskingOptionDict(video_info.person_identity_history)
+        options_dict = MaskingOption.getRandomMaskingOptionDict(video_info.person_identity_history)
         # options_dict = dict()
         # for identity, data in video_info.getIdentityPreviewDict().items():
         #     bgr, box = data['image'], data['box']
         #     bgr_style, crop_box = LibCartoonWrapperQ.inference(np.copy(bgr), np.array(box, dtype=np.int32).tolist())
         #     options_dict[identity] = MaskingOption(301, dict(bgr=bgr_style, box=crop_box))
         #     cv2.imwrite(R'N:\archive\2024\1126-video\DanceShow2\01\cache\{}.png'.format(identity), bgr_style)
-        # LibMasking.maskingVideo(path_in_video, options_dict, path_out_video_masking, path_in_json=path_out_json)
+        LibMasking.maskingVideo(path_in_video, options_dict, path_out_video_masking, path_in_json=path_out_json)
 
-        path_in_video = R'N:\archive\2024\1126-video\Stuff\input.mp4'
-        path_out_json = R'N:\archive\2024\1126-video\Stuff\input.json'
-        path_out_video_scanning = R'N:\archive\2024\1126-video\Stuff\input-scanning.mp4'
-        path_out_video_masking = R'N:\archive\2024\1126-video\Stuff\input-masking.mp4'
-        video_info = LibMasking.scanningVideo(path_in_video, path_out_json=path_out_json, path_out_video=path_out_video_scanning)
+        # path_in_video = R'N:\archive\2024\1126-video\Stuff\input.mp4'
+        # path_out_json = R'N:\archive\2024\1126-video\Stuff\input.json'
+        # path_out_video_scanning = R'N:\archive\2024\1126-video\Stuff\input-scanning.mp4'
+        # path_out_video_masking = R'N:\archive\2024\1126-video\Stuff\input-masking.mp4'
+        # video_info = LibMasking.scanningVideo(path_in_video, path_out_json=path_out_json, path_out_video=path_out_video_scanning)
         # video_info = VideoInfo.loadVideoInfo(path_in_json=path_out_json)
         # options_dict = dict()
         # for identity, data in video_info.getIdentityPreviewDict().items():
@@ -150,8 +81,8 @@ class LibMasking:
         #     1: MaskingOption(301, dict(bgr=cv2.imread(R'N:\archive\2024\1202-mosaic\test\1.png', cv2.IMREAD_UNCHANGED), box=[[209, 94, 339, 223], [165, 10, 382, 228]])),
         #     2: MaskingOption(301, dict(bgr=cv2.imread(R'N:\archive\2024\1202-mosaic\test\2.png', cv2.IMREAD_UNCHANGED), box=[[518, 154, 589, 226], [493, 108, 613, 228]])),
         # }
-        options_dict = MaskingOption.getRandomMaskingOptionDict(video_info.person_identity_history)
-        LibMasking.maskingVideo(path_in_video, options_dict, path_out_video_masking, path_in_json=path_out_json)
+        # options_dict = MaskingOption.getRandomMaskingOptionDict(video_info.person_identity_history)
+        # LibMasking.maskingVideo(path_in_video, options_dict, path_out_video_masking, path_in_json=path_out_json)
 
     """
     """

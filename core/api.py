@@ -96,7 +96,7 @@ def getResultsFromFunctions(name, function, *args, **kwargs):
         >>> options_blur_diffuse = (105, dict(blur_type='blur_diffuse', focus_type='head'))  # 其他：k_neigh=17表示扩散程度
         >>> options_mosaic_square = (201, dict(mosaic_type='mosaic_pixel_square', focus_type='head'))  # 其他：num_pixel=16表示像素个数，越小越模糊
         >>> options_mosaic_polygon = (202, dict(mosaic_type='mosaic_pixel_polygon', focus_type='head'))  # 其他：n_div=16表示像素个数，越小越模糊，vis_boundary=False表示不显示边界线
-        >>> # options_mosaic_polygon一些特别的设置
+        >>> # options_mosaic_polygon一些特别的设置；focus_type可设置为'head'或者'face'或者'box'
         >>> options_mosaic_polygon_small = (202, dict(mosaic_type='mosaic_pixel_polygon_small', focus_type='head'))  # 很少像素+没有边界线
         >>> options_mosaic_polygon_small_line = (202, dict(mosaic_type='mosaic_pixel_polygon_small_line', focus_type='head'))  # 很少像素+有边界线
         >>> options_mosaic_polygon_big = (202, dict(mosaic_type='mosaic_pixel_polygon_big', focus_type='head'))  # 较多像素+没有边界线

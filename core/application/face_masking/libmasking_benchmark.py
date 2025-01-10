@@ -5,6 +5,7 @@ import cv2
 import numpy as np
 import tqdm
 from ...base.cache import XPortrait
+from ...thirdparty.cache import XBody
 from ...utils.resource import Resource
 from .libmasking_blur import LibMasking_Blur
 from .libmasking_mosaic import LibMasking_Mosaic
@@ -34,7 +35,7 @@ def maskingAllWithBlur(cache, path_out, name):
 
     canvas = np.copy(cache.bgr)
     for i in range(cache.number):
-        canvas = LibMasking_Blur.inferenceOnBox_WithBlurWater(canvas, cache.box[i, :], 4, 4, 'box')
+        canvas = LibMasking_Blur.inferenceOnBox_WithBlurWater(canvas, cache.box[i, :], 4, 4, 'face')
     cv2.imwrite('{}/{}-blur-5.png'.format(path_out, name[:-4]), canvas)
 
     canvas = np.copy(cache.bgr)
@@ -65,52 +66,52 @@ def maskingAllWithBlur(cache, path_out, name):
 def maskingAllWithMosaic(cache, path_out, name):
     canvas = np.copy(cache.bgr)
     for i in range(cache.number):
-        canvas = LibMasking_Mosaic.inferenceBoxWithMosaicSquare(canvas, cache.box[i, :], 24, 'box')
+        canvas = LibMasking_Mosaic.inferenceBoxWithMosaicSquare(canvas, cache.box[i, :], 48, 'face')
     cv2.imwrite('{}/{}-mosaic-1.png'.format(path_out, name[:-4]), canvas)
 
     canvas = np.copy(cache.bgr)
     for i in range(cache.number):
-        canvas = LibMasking_Mosaic.inferenceBoxWithMosaicSquare(canvas, cache.box[i, :], 24, 'head')
+        canvas = LibMasking_Mosaic.inferenceBoxWithMosaicSquare(canvas, cache.box[i, :], 48, 'head')
     cv2.imwrite('{}/{}-mosaic-2.png'.format(path_out, name[:-4]), canvas)
 
     canvas = np.copy(cache.bgr)
     for i in range(cache.number):
-        canvas = LibMasking_Mosaic.inferenceBoxWithMosaicPolygon(canvas, cache.box[i, :], 8, True, 'box')
+        canvas = LibMasking_Mosaic.inferenceBoxWithMosaicPolygon(canvas, cache.box[i, :], 16, True, 'face')[0]
     cv2.imwrite('{}/{}-mosaic-3.png'.format(path_out, name[:-4]), canvas)
 
     canvas = np.copy(cache.bgr)
     for i in range(cache.number):
-        canvas = LibMasking_Mosaic.inferenceBoxWithMosaicPolygon(canvas, cache.box[i, :], 8, True, 'head')
+        canvas = LibMasking_Mosaic.inferenceBoxWithMosaicPolygon(canvas, cache.box[i, :], 16, True, 'head')[0]
     cv2.imwrite('{}/{}-mosaic-4.png'.format(path_out, name[:-4]), canvas)
 
     canvas = np.copy(cache.bgr)
     for i in range(cache.number):
-        canvas = LibMasking_Mosaic.inferenceBoxWithMosaicPolygon(canvas, cache.box[i, :], 16, True, 'box')
+        canvas = LibMasking_Mosaic.inferenceBoxWithMosaicPolygon(canvas, cache.box[i, :], 24, True, 'face')[0]
     cv2.imwrite('{}/{}-mosaic-5.png'.format(path_out, name[:-4]), canvas)
 
     canvas = np.copy(cache.bgr)
     for i in range(cache.number):
-        canvas = LibMasking_Mosaic.inferenceBoxWithMosaicPolygon(canvas, cache.box[i, :], 16, True, 'head')
+        canvas = LibMasking_Mosaic.inferenceBoxWithMosaicPolygon(canvas, cache.box[i, :], 24, True, 'head')[0]
     cv2.imwrite('{}/{}-mosaic-6.png'.format(path_out, name[:-4]), canvas)
 
     canvas = np.copy(cache.bgr)
     for i in range(cache.number):
-        canvas = LibMasking_Mosaic.inferenceBoxWithMosaicPolygon(canvas, cache.box[i, :], 8, False, 'box')
+        canvas = LibMasking_Mosaic.inferenceBoxWithMosaicPolygon(canvas, cache.box[i, :], 16, False, 'face')[0]
     cv2.imwrite('{}/{}-mosaic-7.png'.format(path_out, name[:-4]), canvas)
 
     canvas = np.copy(cache.bgr)
     for i in range(cache.number):
-        canvas = LibMasking_Mosaic.inferenceBoxWithMosaicPolygon(canvas, cache.box[i, :], 8, False, 'head')
+        canvas = LibMasking_Mosaic.inferenceBoxWithMosaicPolygon(canvas, cache.box[i, :], 16, False, 'head')[0]
     cv2.imwrite('{}/{}-mosaic-8.png'.format(path_out, name[:-4]), canvas)
 
     canvas = np.copy(cache.bgr)
     for i in range(cache.number):
-        canvas = LibMasking_Mosaic.inferenceBoxWithMosaicPolygon(canvas, cache.box[i, :], 16, False, 'box')
+        canvas = LibMasking_Mosaic.inferenceBoxWithMosaicPolygon(canvas, cache.box[i, :], 32, False, 'face')[0]
     cv2.imwrite('{}/{}-mosaic-9.png'.format(path_out, name[:-4]), canvas)
 
     canvas = np.copy(cache.bgr)
     for i in range(cache.number):
-        canvas = LibMasking_Mosaic.inferenceBoxWithMosaicPolygon(canvas, cache.box[i, :], 16, False, 'head')
+        canvas = LibMasking_Mosaic.inferenceBoxWithMosaicPolygon(canvas, cache.box[i, :], 32, False, 'head')[0]
     cv2.imwrite('{}/{}-mosaic-10.png'.format(path_out, name[:-4]), canvas)
 
 def maskingAllWithSticker(cache, path_out, name):
@@ -122,14 +123,14 @@ def maskingAllWithSticker(cache, path_out, name):
     cv2.imwrite('{}/{}-sticker-1.png'.format(path_out, name[:-4]), canvas)
     
 def benchmark():
-    name = 'example.png'
+    name = 'liuyifei.png'
     path_in = '{}/document'.format(os.path.split(__file__)[0])
-    path_out = '{}/document/example'.format(os.path.split(__file__)[0])
+    path_out = '{}/document/liuyifei'.format(os.path.split(__file__)[0])
     bgr = cv2.imread('{}/{}'.format(path_in, name), cv2.IMREAD_COLOR)
-    cache = XPortrait(bgr)
+    cache = XPortrait(bgr)  #, backend='ultralytics.yolo11n-pose'
     # blur
     maskingAllWithBlur(cache, path_out, name)
     # mosaic
-    maskingAllWithMosaic(cache, path_out, name)
+    # maskingAllWithMosaic(cache, path_out, name)
     # sticker
-    maskingAllWithSticker(cache, path_out, name)
+    # maskingAllWithSticker(cache, path_out, name)

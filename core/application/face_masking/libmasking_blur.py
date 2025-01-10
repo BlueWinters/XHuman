@@ -172,6 +172,12 @@ class LibMasking_Blur:
         return XPortraitHelper.getFaceRegion(cache, index=n, top_line=top_line, value=value)[n]
 
     @staticmethod
+    def getHeadMask(cache, value=255):
+        parsing = cache.parsing
+        mask = np.where((0 < parsing) & (parsing < 15) & (parsing != 12), value, 0).astype(np.uint8)
+        return mask
+
+    @staticmethod
     def workOnSelected(source_bgr, blured_bgr, kernel=17, mask=None, **kwargs):
         if mask is None:
             mask = np.ones_like(source_bgr, dtype=np.uint8) * 255
@@ -209,11 +215,16 @@ class LibMasking_Blur:
     def inferenceOnBox_WithBlurGaussian(bgr, box, blur_kernel, focus_type):
         h, w = bgr.shape[:2]
         blured_bgr = LibMasking_Blur.doWithGaussianBlur(bgr, kernel=blur_kernel)
-        if focus_type == 'head':
+        if focus_type == 'face':
             # lft, top, rig, bot = box
             mask = np.zeros(shape=(h, w), dtype=np.uint8)
             lft, top, rig, bot = box = Rectangle(box).expand(0.2, 0.2).clip(0, 0, w, h).asInt()
             mask[top:bot, lft:rig] = LibMasking_Blur.getFaceMaskByPoints(bgr, box)
+        elif focus_type == 'head':
+            mask = np.zeros(shape=(h, w), dtype=np.uint8)
+            lft, top, rig, bot = Rectangle(box).toSquare().expand(0.5, 0.5).clip(0, 0, w, h).asInt()
+            mask[top:bot, lft:rig] = LibMasking_Blur.getHeadMask(XPortrait(bgr[top:bot, lft:rig, :]))
+            mask[box[3]:, :] = 0
         else:
             mask = LibMasking_Blur.getMaskFromBox(h, w, box, ratio=0.)
         return LibMasking_Blur.workOnSelected(bgr, blured_bgr, mask=mask)
@@ -222,11 +233,16 @@ class LibMasking_Blur:
     def inferenceOnBox_WithBlurMotion(bgr, box, blur_kernel, focus_type):
         h, w = bgr.shape[:2]
         blured_bgr = LibMasking_Blur.doWithBlurMotion(bgr, kernel=blur_kernel)
-        if focus_type == 'head':
+        if focus_type == 'face':
             # lft, top, rig, bot = box
             mask = np.zeros(shape=(h, w), dtype=np.uint8)
             lft, top, rig, bot = box = Rectangle(box).expand(0.2, 0.2).clip(0, 0, w, h).asInt()
             mask[top:bot, lft:rig] = LibMasking_Blur.getFaceMaskByPoints(bgr, box)
+        elif focus_type == 'head':
+            mask = np.zeros(shape=(h, w), dtype=np.uint8)
+            lft, top, rig, bot = Rectangle(box).toSquare().expand(0.5, 0.5).clip(0, 0, w, h).asInt()
+            mask[top:bot, lft:rig] = LibMasking_Blur.getHeadMask(XPortrait(bgr[top:bot, lft:rig, :]))
+            mask[box[3]:, :] = 0
         else:
             mask = LibMasking_Blur.getMaskFromBox(h, w, box, ratio=0.)
         return LibMasking_Blur.workOnSelected(bgr, blured_bgr, mask=mask)
@@ -235,10 +251,15 @@ class LibMasking_Blur:
     def inferenceOnBox_WithBlurWater(bgr, box, a, b, focus_type):
         h, w = bgr.shape[:2]
         lft, top, rig, bot = box
-        if focus_type == 'head':
+        if focus_type == 'face':
             mask = np.zeros(shape=(h, w), dtype=np.uint8)
             lft, top, rig, bot = box = Rectangle(box).expand(0.2, 0.2).clip(0, 0, w, h).asInt()
             mask[top:bot, lft:rig] = LibMasking_Blur.getFaceMaskByPoints(bgr, box)
+        elif focus_type == 'head':
+            mask = np.zeros(shape=(h, w), dtype=np.uint8)
+            lft, top, rig, bot = Rectangle(box).toSquare().expand(0.5, 0.5).clip(0, 0, w, h).asInt()
+            mask[top:bot, lft:rig] = LibMasking_Blur.getHeadMask(XPortrait(bgr[top:bot, lft:rig, :]))
+            mask[box[3]:, :] = 0
         else:
             mask = LibMasking_Blur.getMaskFromBox(h, w, box, ratio=0.)
         part = bgr[top:bot, lft:rig, :]
@@ -253,11 +274,16 @@ class LibMasking_Blur:
     def inferenceOnBox_WithBlurDiffusion(bgr, box, k_neigh, pre_k, post_k, focus_type):
         h, w = bgr.shape[:2]
         blured_bgr = LibMasking_Blur.doWithBlurDiffusion(bgr, k_neigh, pre_k, post_k)
-        if focus_type == 'head':
+        if focus_type == 'face':
             # lft, top, rig, bot = box
             mask = np.zeros(shape=(h, w), dtype=np.uint8)
             lft, top, rig, bot = box = Rectangle(box).expand(0.2, 0.2).clip(0, 0, w, h).asInt()
             mask[top:bot, lft:rig] = LibMasking_Blur.getFaceMaskByPoints(bgr, box)
+        elif focus_type == 'head':
+            mask = np.zeros(shape=(h, w), dtype=np.uint8)
+            lft, top, rig, bot = Rectangle(box).toSquare().expand(0.5, 0.5).clip(0, 0, w, h).asInt()
+            mask[top:bot, lft:rig] = LibMasking_Blur.getHeadMask(XPortrait(bgr[top:bot, lft:rig, :]))
+            mask[box[3]:, :] = 0
         else:
             mask = LibMasking_Blur.getMaskFromBox(h, w, box, ratio=0.)
         return LibMasking_Blur.workOnSelected(bgr, blured_bgr, mask=mask)
