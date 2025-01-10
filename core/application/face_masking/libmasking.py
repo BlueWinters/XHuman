@@ -18,24 +18,28 @@ from ...utils.resource import Resource
 from ... import XManager
 
 
+__version__ = '0.1.0'
+logging.error('face_masking version: {}'.format(__version__))
+
+
 class LibMasking:
     """
     """
     @staticmethod
     def benchmarkOnImage():
         from core.thirdparty.cartoon.libcartoon import LibCartoonWrapperQ
-        path_in_image = R'N:\archive\2024\1126-video\DanceShow2\01\test\00000.png'
-        path_out_json = R'N:\archive\2024\1126-video\DanceShow2\01\test\00000.json'
-        path_out_image = R'N:\archive\2024\1126-video\DanceShow2\01\test\00000-output.png'
-        video_info, _ = LibMasking.scanningImage(path_in_image, path_out_json=path_out_json)
-        # video_info = VideoInfo.loadVideoInfo(path_in_json=path_out_json)
-        # options_dict = MaskingOption.getRandomMaskingOptionDict(video_info.person_identity_history)
-        options_dict = dict()
-        for identity, data in video_info.getIdentityPreviewDict().items():
-            bgr, box = data['image'], data['box']
-            bgr_style, crop_box = LibCartoonWrapperQ.inference(np.copy(bgr), np.array(box, dtype=np.int32).tolist())
-            options_dict[identity] = MaskingOption(301, dict(bgr=bgr_style, align=crop_box))
-            cv2.imwrite(R'N:\archive\2024\1126-video\DanceShow2\01\test\{}.png'.format(identity), bgr_style)
+        path_in_image = R'N:\archive\2024\1126-video\DanceShow2\01\test-image\00000.png'
+        path_out_json = R'N:\archive\2024\1126-video\DanceShow2\01\test-image\00000.json'
+        path_out_image = R'N:\archive\2024\1126-video\DanceShow2\01\test-image\00000-output-loaded.png'
+        # video_info, _ = LibMasking.scanningImage(path_in_image, path_out_json=path_out_json)
+        video_info = VideoInfo.loadVideoInfo(path_in_json=path_out_json)
+        options_dict = MaskingOption.getRandomMaskingOptionDict(video_info.person_identity_history)
+        # options_dict = dict()
+        # for identity, data in video_info.getIdentityPreviewDict().items():
+        #     bgr, box = data['image'], data['box']
+        #     bgr_style, crop_box = LibCartoonWrapperQ.inference(np.copy(bgr), np.array(box, dtype=np.int32).tolist())
+        #     options_dict[identity] = MaskingOption(301, dict(bgr=bgr_style, align=crop_box))
+        #     cv2.imwrite(R'N:\archive\2024\1126-video\DanceShow2\01\test-image\{}.png'.format(identity), bgr_style)
         result = LibMasking.maskingImage(path_in_image, options_dict, path_in_json=path_out_json)
         cv2.imwrite(path_out_image, result)
 
@@ -48,41 +52,42 @@ class LibMasking:
         # path_out_video_scanning = R'N:\archive\2024\1126-video\DanceShow2\01\common\input-01-scanning.mp4'
         # path_out_video_masking = R'N:\archive\2024\1126-video\DanceShow2\01\common\input-01-masking.mp4'
         # hard
-        path_in_video = R'N:\archive\2024\1126-video\DanceShow2\01\input-01.mp4'
-        path_out_json = R'N:\archive\2024\1126-video\DanceShow2\01\test\input-01_yolo.json'
-        path_out_video_scanning = R'N:\archive\2024\1126-video\DanceShow2\01\test\input-01-scanning_yolo.mp4'
-        path_out_video_masking = R'N:\archive\2024\1126-video\DanceShow2\01\test\input-01-masking_yolo.mp4'
+        # path_in_video = R'N:\archive\2024\1126-video\DanceShow2\01\input-01.mp4'
+        # path_out_json = R'N:\archive\2024\1126-video\DanceShow2\01\test\input-01_yolo.json'
+        # path_out_video_scanning = R'N:\archive\2024\1126-video\DanceShow2\01\test\input-01-scanning_yolo.mp4'
+        # path_out_video_masking = R'N:\archive\2024\1126-video\DanceShow2\01\test\input-01-masking_yolo.mp4'
 
         # pipeline
-        video_info = LibMasking.scanningVideo(path_in_video, path_out_json=path_out_json, path_out_video=path_out_video_scanning)
+        # video_info = LibMasking.scanningVideo(path_in_video, path_out_json=path_out_json, path_out_video=path_out_video_scanning)
         # video_info = VideoInfo.loadVideoInfo(path_in_json=path_out_json)
-        options_dict = MaskingOption.getRandomMaskingOptionDict(video_info.person_identity_history)
+        # options_dict = MaskingOption.getRandomMaskingOptionDict(video_info.person_identity_history)
         # options_dict = dict()
         # for identity, data in video_info.getIdentityPreviewDict().items():
         #     bgr, box = data['image'], data['box']
         #     bgr_style, crop_box = LibCartoonWrapperQ.inference(np.copy(bgr), np.array(box, dtype=np.int32).tolist())
         #     options_dict[identity] = MaskingOption(301, dict(bgr=bgr_style, box=crop_box))
         #     cv2.imwrite(R'N:\archive\2024\1126-video\DanceShow2\01\cache\{}.png'.format(identity), bgr_style)
-        LibMasking.maskingVideo(path_in_video, options_dict, path_out_video_masking, path_in_json=path_out_json)
+        # LibMasking.maskingVideo(path_in_video, options_dict, path_out_video_masking, path_in_json=path_out_json)
 
-        # path_in_video = R'N:\archive\2024\1126-video\Stuff\input.mp4'
-        # path_out_json = R'N:\archive\2024\1126-video\Stuff\input.json'
-        # path_out_video_scanning = R'N:\archive\2024\1126-video\Stuff\input-scanning.mp4'
-        # path_out_video_masking = R'N:\archive\2024\1126-video\Stuff\input-masking.mp4'
+        path_in_video = R'N:\archive\2024\1126-video\Stuff\input3.mp4'
+        path_out_json = R'N:\archive\2024\1126-video\Stuff\input3.json'
+        path_out_video_scanning = R'N:\archive\2024\1126-video\Stuff\input3-scanning.mp4'
+        path_out_video_masking = R'N:\archive\2024\1126-video\Stuff\input3-masking-load.mp4'
         # video_info = LibMasking.scanningVideo(path_in_video, path_out_json=path_out_json, path_out_video=path_out_video_scanning)
-        # video_info = VideoInfo.loadVideoInfo(path_in_json=path_out_json)
+        video_info = VideoInfo.loadVideoInfo(path_in_json=path_out_json)
         # options_dict = dict()
         # for identity, data in video_info.getIdentityPreviewDict().items():
         #     bgr, box = data['image'], data['box']
-        #     bgr_style, crop_box = QCallWrapper.inference(np.copy(bgr), np.array(box, dtype=np.int32).tolist())
+        #     print(data['index_frame'], data['box'], data['box_score'])
+        #     bgr_style, crop_box = LibCartoonWrapperQ.inference(np.copy(bgr), np.array(box, dtype=np.int32).tolist())
         #     options_dict[identity] = MaskingOption(301, dict(bgr=bgr_style, box=crop_box))
-        #     cv2.imwrite(R'N:\archive\2024\1202-mosaic\test\{}.png'.format(identity), bgr_style)
+        #     cv2.imwrite(R'N:\archive\2024\1126-video\Stuff\input3-{}.png'.format(identity), bgr_style)
         # options_dict = {
         #     1: MaskingOption(301, dict(bgr=cv2.imread(R'N:\archive\2024\1202-mosaic\test\1.png', cv2.IMREAD_UNCHANGED), box=[[209, 94, 339, 223], [165, 10, 382, 228]])),
         #     2: MaskingOption(301, dict(bgr=cv2.imread(R'N:\archive\2024\1202-mosaic\test\2.png', cv2.IMREAD_UNCHANGED), box=[[518, 154, 589, 226], [493, 108, 613, 228]])),
         # }
-        # options_dict = MaskingOption.getRandomMaskingOptionDict(video_info.person_identity_history)
-        # LibMasking.maskingVideo(path_in_video, options_dict, path_out_video_masking, path_in_json=path_out_json)
+        options_dict = MaskingOption.getRandomMaskingOptionDict(video_info.person_identity_history)
+        LibMasking.maskingVideo(path_in_video, options_dict, path_out_video_masking, path_in_json=path_out_json)
 
     """
     """
@@ -189,7 +194,7 @@ class LibMasking:
     def scanningImage(path_image_or_bgr, **kwargs) -> typing.Tuple[VideoInfo, typing.Union[np.ndarray, None]]:
         cache = LibScaner.packageAsCache(path_image_or_bgr)
         path_out_json = kwargs.pop('path_out_json', None) or Resource.createRandomCacheFileName('.json')
-        video_info = LibScaner.inferenceOnImage([cache], path_out_json=path_out_json)
+        video_info = LibScaner.inferenceOnImage(cache, path_out_json=path_out_json)
         visual_bgr = LibScaner.visualSingleFrame(cache.bgr, video_info) if bool(kwargs.pop('visual_scanning', False)) else None
         return video_info, visual_bgr
 

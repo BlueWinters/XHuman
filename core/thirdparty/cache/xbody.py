@@ -149,6 +149,10 @@ class XBody(XCache):
             self._number = len(result)
             self._score = np.reshape(result.boxes.conf.cpu().numpy().astype(np.float32), (-1,))
             self._box = np.reshape(np.round(result.boxes.xyxy.cpu().numpy()).astype(np.int32), (-1, 4,))
+            if 'pose' in self.backend:
+                points17 = np.reshape(result.keypoints.data.cpu().numpy().astype(np.float32), (-1, 17, 3))
+                self._points17 = np.reshape(points17[:, :, :2], (-1, 17, 2))
+                self._scores17 = np.reshape(points17[:, :, 2], (-1, 17))
 
     @property
     def number(self):
@@ -168,6 +172,8 @@ class XBody(XCache):
             self._detectBoxes(self.bgr)
         return self._box
 
+    """
+    """
     def _detectPoseWithRTMPose(self):
         points26, scores26 = self._getModule('rtmpose')(self.bgr, boxes=self.box)
         self._points26 = np.reshape(np.array(points26, dtype=np.int32), (-1, 26, 2))
@@ -184,6 +190,20 @@ class XBody(XCache):
         if not hasattr(self, '_scores26'):
             self._detectPoseWithRTMPose()
         return self._scores26
+
+    @property
+    def points17(self):
+        if not hasattr(self, '_points17'):
+            self.backend = 'ultralytics.yolo11n-pose'
+            self._detectBoxes(self.bgr)
+        return self._points17
+
+    @property
+    def scores17(self):
+        if not hasattr(self, '_scores17'):
+            self.backend = 'ultralytics.yolo11n-pose'
+            self._detectBoxes(self.bgr)
+        return self._scores17
 
     @property
     def visual_points26(self):

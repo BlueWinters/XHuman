@@ -88,8 +88,7 @@ class Person:
                 r = 0.5
                 info1.box_face = (r * info2.box_face + (1 - r) * info1.box_face).astype(np.int32)
 
-    def appendInfo(self, index_frame, box_tracker, box_face):
-        # TODO: interpolate frame info
+    def appendInfo(self, index_frame, bgr, box_tracker, box_face, box_face_score):
         lft, top, rig, bot = box_face
         if np.sum(box_face.astype(np.int32)) != 0 and lft < rig and top < bot:
             self.frame_info_list.append(PersonFrameInfo(index_frame=index_frame, box_tracker=box_tracker, box_face=box_face, box_copy=False))
@@ -101,6 +100,7 @@ class Person:
                 self.frame_info_list.append(PersonFrameInfo(index_frame=index_frame, box_tracker=box_tracker, box_face=box_face, box_copy=True))
         # enforce to smoothing
         self.smoothing()
+        self.setIdentityPreview(index_frame, bgr, box_face, box_face_score)
 
     def getLastInfo(self) -> PersonFrameInfo:
         return self.frame_info_list[-1]
@@ -109,15 +109,23 @@ class Person:
         time_beg = self.frame_info_list[0].index_frame
         time_end = self.frame_info_list[-1].index_frame
         time_len = len(self.frame_info_list)
-        info = dict(identity=self.identity, time_beg=time_beg, time_end=time_end, time_len=time_len)
+        preview_dict = dict(index_frame=self.preview['index_frame'], box_face=self.preview['box'].tolist(), box_score=float(self.preview['box_score']))
+        info = dict(identity=self.identity, time_beg=time_beg, time_end=time_end, time_len=time_len, preview=preview_dict)
         if with_frame_info is True:
             info['frame_info_list'] = [str([info.index_frame, *info.box_face.tolist()]) for info in self.frame_info_list]
         return info
 
-    def setIdentityPreview(self, bgr, box_face):
+    def setIdentityPreview(self, index_frame, bgr, box_face, box_face_score):
         if self.preview is None:
             lft, top, rig, bot = box_face
-            self.preview = dict(box=box_face, image=np.copy(bgr), face=np.copy(bgr[top:bot, lft:rig]))
+            self.preview = dict(index_frame=index_frame, box=box_face, box_score=box_face_score,
+                                image=np.copy(bgr), face=np.copy(bgr[top:bot, lft:rig]))
+        else:
+            # just update the preview face
+            if box_face_score < self.preview['box_score']:
+                lft, top, rig, bot = box_face
+                self.preview = dict(index_frame=index_frame, box=box_face, box_score=box_face_score,
+                                    image=np.copy(bgr), face=np.copy(bgr[top:bot, lft:rig]))
 
     """
     """
@@ -171,7 +179,7 @@ class VideoInfo:
             self.person_identity_history.append(person)
         self.person_list_current += person_list_new
 
-    def createNewPerson(self, index_frame, bgr, box_tracker, box_face):
+    def createNewPerson(self, index_frame, bgr, box_tracker, box_face, box_face_score):
         if self.isFixedNumber and self.person_identity_seq == self.person_fixed_num:
             if len(self.person_identity_history) > 0:
                 non_activate_index = [n for n, person in enumerate(self.person_identity_history) if person.activate is False]
@@ -186,14 +194,14 @@ class VideoInfo:
                         backtracking_iou = iou
                 person = self.person_identity_history.pop(backtracking_index)
                 person.setActivate(True)
-                person.appendInfo(index_frame, box_tracker, box_face)
+                person.appendInfo(index_frame, bgr, box_tracker, box_face, box_face_score)
                 return person
             return None
         # create person as common
         self.person_identity_seq += 1
         person = Person(self.person_identity_seq)
-        person.appendInfo(index_frame, box_tracker, box_face)
-        person.setIdentityPreview(bgr, box_face)
+        person.appendInfo(index_frame, bgr, box_tracker, box_face, box_face_score)
+        person.setIdentityPreview(index_frame, bgr, box_face, box_face_score)
         return person
 
     def getSortedHistory(self):
@@ -216,7 +224,9 @@ class VideoInfo:
         preview_dict = {}
         for person in self.getSortedHistory():
             preview = person.preview
-            preview_dict[person.identity] = dict(box=preview['box'], image=preview['image'], face=transform(preview['face']))
+            preview_dict[person.identity] = dict(
+                box=preview['box'], image=preview['image'],
+                face=transform(preview['face']), index_frame=preview['index_frame'], box_score=preview['box_score'])
         return preview_dict
 
     def getIdentityPreviewList(self, size=256, is_bgr=True):
@@ -319,21 +329,22 @@ class LibScaner:
         num_max = min(cache.number, video_info.person_fixed_num) if video_info.isFixedNumber else cache.number
         for n in range(num_max):
             cur_one_box = cache.box[n, :]  # 4: lft,top,rig,bot
+            box_face_score = np.sum(np.abs(cache.radian[n, :])) if isinstance(cache, XPortrait) else 1
             if cache.score[n] < 0.5:
                 continue
             iou_max_idx, iou_max_val, dis_min_idx, dis_min_val = LibScaner.findBestMatch(video_info.person_list_current, cur_one_box)
             if iou_max_idx != -1 and (iou_max_val > LibScaner.IOU_Threshold or video_info.isFixedNumber):
                 person_cur = video_info.person_list_current.pop(iou_max_idx)
                 assert isinstance(person_cur, Person)
-                person_cur.appendInfo(index_frame, cur_one_box, cur_one_box)
+                person_cur.appendInfo(index_frame, cache.bgr, cur_one_box, cur_one_box, box_face_score)
                 person_list_new.append(person_cur)
             else:
                 # create a new person
-                person_new = video_info.createNewPerson(index_frame, cache.bgr, cur_one_box, cur_one_box)
+                person_new = video_info.createNewPerson(index_frame, cache.bgr, cur_one_box, cur_one_box, box_face_score)
                 if person_new is None:
                     person_cur = video_info.person_list_current.pop(dis_min_idx)
                     assert isinstance(person_cur, Person)
-                    person_cur.appendInfo(index_frame, cur_one_box, cur_one_box)
+                    person_cur.appendInfo(index_frame, cache.bgr, cur_one_box, cur_one_box, box_face_score)
                     person_list_new.append(person_cur)
                 else:
                     person_list_new.append(person_new)
@@ -368,7 +379,10 @@ class LibScaner:
             top = int(max(ctr_ear[1] - 0.4 * len_ear, 0))
             bot = int(min(ctr_ear[1] + 0.6 * len_ear, h))
             bbox = BoundingBox(np.array([lft, top, rig, bot], dtype=np.int32)).toSquare().clip(0, 0, w, h).asInt()
-            return np.array(bbox, dtype=np.int32)
+            if confidence[0] > threshold:
+                return np.array(bbox, dtype=np.int32), 1
+            else:
+                return np.array(bbox, dtype=np.int32), 4
         if confidence[3] > threshold and confidence[1] > threshold:
             rig = points[3, 0]  # points[1, 0] < points[3, 0]
             if confidence[2] > threshold:
@@ -379,14 +393,14 @@ class LibScaner:
                 top = int(max(points[0, 1] - 0.4 * len_c2rig, 0))
                 bot = int(min(points[0, 1] + 0.8 * len_c2rig, h))
                 bbox = BoundingBox(np.array([lft, top, rig, bot], dtype=np.int32)).toSquare().clip(0, 0, w, h).asInt()
-                return np.array(bbox, dtype=np.int32)
+                return np.array(bbox, dtype=np.int32), 2
             if confidence[0] > threshold:
                 lft = points[0, 0] - abs(points[0, 0] - points[1, 0])  # min(lft, points[0, 0])
                 len_c2rig = rig - points[0, 0]
                 top = int(max(points[0, 1] - 0.4 * len_c2rig, 0))
                 bot = int(min(points[0, 1] + 0.8 * len_c2rig, h))
                 bbox = BoundingBox(np.array([lft, top, rig, bot], dtype=np.int32)).toSquare().clip(0, 0, w, h).asInt()
-                return np.array(bbox, dtype=np.int32)
+                return np.array(bbox, dtype=np.int32), 3
         if confidence[4] > threshold and confidence[2] > threshold:
             lft = points[4, 0]
             if confidence[1] > threshold:
@@ -397,15 +411,27 @@ class LibScaner:
                 top = int(max(points[0, 1] - 0.4 * len_c2lft, 0))
                 bot = int(min(points[0, 1] + 0.8 * len_c2lft, h))
                 bbox = BoundingBox(np.array([lft, top, rig, bot], dtype=np.int32)).toSquare().clip(0, 0, w, h).asInt()
-                return np.array(bbox, dtype=np.int32)
+                return np.array(bbox, dtype=np.int32), 2
             if confidence[0] > threshold:
                 rig = points[0, 0] + abs(points[2, 0] - points[0, 0])  # min(lft, points[0, 0])
                 len_c2lft = points[0, 0] - lft
                 top = int(max(points[0, 1] - 0.4 * len_c2lft, 0))
                 bot = int(min(points[0, 1] + 0.8 * len_c2lft, h))
                 bbox = BoundingBox(np.array([lft, top, rig, bot], dtype=np.int32)).toSquare().clip(0, 0, w, h).asInt()
-                return np.array(bbox, dtype=np.int32)
-        return np.array([0, 0, 0, 0], dtype=np.int32)
+                return np.array(bbox, dtype=np.int32), 3
+        return np.array([0, 0, 0, 0], dtype=np.int32), 4
+
+    @staticmethod
+    def hasOverlap(box, n):
+        cur = box[n, :]
+        for i in range(len(box)):
+            if i != n:
+                pre_one_rect = BoundingBox(cur)
+                cur_one_rect = BoundingBox(box[i, :])
+                iou = BoundingBox.iou(pre_one_rect, cur_one_rect)
+                if iou > 0:
+                    return True
+        return False
 
     @staticmethod
     def updateWithYOLO(index_frame, cache, video_info: VideoInfo):
@@ -425,7 +451,8 @@ class LibScaner:
         index_list = np.argsort(score)[::-1].tolist()
         for i, n in enumerate(index_list):
             cur_one_box_tracker = box[n, :]  # 4: lft,top,rig,bot
-            cur_one_box_face = LibScaner.transformPoints2FaceBox(cache.bgr, points[n, :, :], cur_one_box_tracker)
+            cur_one_box_face, box_face_score = LibScaner.transformPoints2FaceBox(cache.bgr, points[n, :, :], cur_one_box_tracker)
+            box_face_score = box_face_score if LibScaner.hasOverlap(box, n) is False and number == video_info.person_fixed_num else 4
             index = LibScaner.matchPrevious(video_info.person_list_current, int(identity[n]))
             if cls[n] != 0:
                 index_list.remove(n)
@@ -433,31 +460,41 @@ class LibScaner:
             if index != -1:
                 person_cur = video_info.person_list_current.pop(index)
                 assert isinstance(person_cur, Person)
-                person_cur.appendInfo(index_frame, cur_one_box_tracker, cur_one_box_face)
+                person_cur.appendInfo(index_frame, cache.bgr, cur_one_box_tracker, cur_one_box_face, box_face_score)
                 person_list_new.append(person_cur)
                 index_list.remove(n)
+                #
+                # if index_frame % 32 == 0:
+                #     lft, top, rig, bot = cur_one_box_tracker
+                #     cv2.imwrite(R'N:\archive\2024\1126-video\DanceShow2\01\test\reid\{}-{}.png'.format(int(identity[n]), index_frame), cache.bgr[top:bot, lft:rig, :])
+                #     points_new = np.copy(points[n, :, :])
+                #     points_new[:, 0] = np.clip(points_new[:, 0] - lft, 0, cache.shape[1])
+                #     points_new[:, 1] = np.clip(points_new[:, 1] - top, 0, cache.shape[0])
+                #     data = [dict(keypoints=points_new.tolist(), is_target=True),]
+                #     json.dump(data, open(R'N:\archive\2024\1126-video\DanceShow2\01\test\reid\{}-{}.json'.format(int(identity[n]), index_frame), 'w'), indent=4)
                 continue
 
         # update from history
         for i, n in enumerate(index_list):
             cur_one_box_tracker = box[n, :]  # 4: lft,top,rig,bot
-            cur_one_box_face = LibScaner.transformPoints2FaceBox(cache.bgr, points[n, :, :], cur_one_box_tracker)
+            cur_one_box_face, box_face_score = LibScaner.transformPoints2FaceBox(cache.bgr, points[n, :, :], cur_one_box_tracker)
+            box_face_score = box_face_score if LibScaner.hasOverlap(box, n) is False and number == video_info.person_fixed_num else 4
             iou_max_idx, iou_max_val, dis_min_idx, dis_min_val = LibScaner.findBestMatch(video_info.person_list_current, cur_one_box_tracker)
             if iou_max_idx != -1 and (iou_max_val > LibScaner.IOU_Threshold or video_info.isFixedNumber):
                 person_cur = video_info.person_list_current.pop(iou_max_idx)
                 assert isinstance(person_cur, Person)
-                person_cur.appendInfo(index_frame, cur_one_box_tracker, cur_one_box_face)
+                person_cur.appendInfo(index_frame, cache.bgr, cur_one_box_tracker, cur_one_box_face, box_face_score)
                 person_list_new.append(person_cur)
             else:
                 if np.sum(cur_one_box_face) > 0:
                     # create a new person
-                    person_new = video_info.createNewPerson(index_frame, cache.bgr, cur_one_box_tracker, cur_one_box_face)
+                    person_new = video_info.createNewPerson(index_frame, cache.bgr, cur_one_box_tracker, cur_one_box_face, box_face_score)
                     if person_new is None:
                         if len(video_info.person_list_current) == 0:
                             continue
                         person_cur = video_info.person_list_current.pop(dis_min_idx)
                         assert isinstance(person_cur, Person)
-                        person_cur.appendInfo(index_frame, cur_one_box_tracker, cur_one_box_face)
+                        person_cur.appendInfo(index_frame, cache.bgr, cur_one_box_tracker, cur_one_box_face, box_face_score)
                         person_list_new.append(person_cur)
                     else:
                         person_list_new.append(person_new)
