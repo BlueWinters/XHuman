@@ -380,10 +380,10 @@ class LibScaner:
             bot = int(min(ctr_ear[1] + 0.6 * len_ear, h))
             bbox = BoundingBox(np.array([lft, top, rig, bot], dtype=np.int32)).toSquare().clip(0, 0, w, h).asInt()
             if confidence[0] > threshold:
-                return np.array(bbox, dtype=np.int32), 1 * np.mean(1-confidence[5:])
+                return np.array(bbox, dtype=np.int32), 1 + np.mean(1-confidence[5:])
 
             else:
-                return np.array(bbox, dtype=np.int32), 4 * np.mean(1-confidence[5:])
+                return np.array(bbox, dtype=np.int32), 4 + np.mean(1-confidence[5:])
         if confidence[3] > threshold and confidence[1] > threshold:
             rig = points[3, 0]  # points[1, 0] < points[3, 0]
             if confidence[2] > threshold:
@@ -394,14 +394,14 @@ class LibScaner:
                 top = int(max(points[0, 1] - 0.4 * len_c2rig, 0))
                 bot = int(min(points[0, 1] + 0.8 * len_c2rig, h))
                 bbox = BoundingBox(np.array([lft, top, rig, bot], dtype=np.int32)).toSquare().clip(0, 0, w, h).asInt()
-                return np.array(bbox, dtype=np.int32), 2 * np.mean(1-confidence[5:])
+                return np.array(bbox, dtype=np.int32), 2 + np.mean(1-confidence[5:])
             if confidence[0] > threshold:
                 lft = points[0, 0] - abs(points[0, 0] - points[1, 0])  # min(lft, points[0, 0])
                 len_c2rig = rig - points[0, 0]
                 top = int(max(points[0, 1] - 0.4 * len_c2rig, 0))
                 bot = int(min(points[0, 1] + 0.8 * len_c2rig, h))
                 bbox = BoundingBox(np.array([lft, top, rig, bot], dtype=np.int32)).toSquare().clip(0, 0, w, h).asInt()
-                return np.array(bbox, dtype=np.int32), 3 * np.mean(1-confidence[5:])
+                return np.array(bbox, dtype=np.int32), 3 + np.mean(1-confidence[5:])
         if confidence[4] > threshold and confidence[2] > threshold:
             lft = points[4, 0]
             if confidence[1] > threshold:
@@ -412,15 +412,15 @@ class LibScaner:
                 top = int(max(points[0, 1] - 0.4 * len_c2lft, 0))
                 bot = int(min(points[0, 1] + 0.8 * len_c2lft, h))
                 bbox = BoundingBox(np.array([lft, top, rig, bot], dtype=np.int32)).toSquare().clip(0, 0, w, h).asInt()
-                return np.array(bbox, dtype=np.int32), 2 * np.mean(1-confidence[5:])
+                return np.array(bbox, dtype=np.int32), 2 + np.mean(1-confidence[5:])
             if confidence[0] > threshold:
                 rig = points[0, 0] + abs(points[2, 0] - points[0, 0])  # min(lft, points[0, 0])
                 len_c2lft = points[0, 0] - lft
                 top = int(max(points[0, 1] - 0.4 * len_c2lft, 0))
                 bot = int(min(points[0, 1] + 0.8 * len_c2lft, h))
                 bbox = BoundingBox(np.array([lft, top, rig, bot], dtype=np.int32)).toSquare().clip(0, 0, w, h).asInt()
-                return np.array(bbox, dtype=np.int32), 3 * np.mean(1-confidence[5:])
-        return np.array([0, 0, 0, 0], dtype=np.int32), 4 * np.mean(1-confidence[5:])
+                return np.array(bbox, dtype=np.int32), 3 + np.mean(1-confidence[5:])
+        return np.array([0, 0, 0, 0], dtype=np.int32), 4 + np.mean(1-confidence[5:])
 
     @staticmethod
     def hasOverlap(box, n):
