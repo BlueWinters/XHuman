@@ -156,7 +156,6 @@ class LibMasking_Sticker:
             if 'box' in sticker:
                 H, W, C = bgr.shape
                 box_src, box_fmt = sticker['box']
-                # box_src = copy.deepcopy(box)
                 box_remap = BoundingBox.remapBBox(box_src, box_fmt, box)
                 lft, top, rig, bot = BoundingBox(np.array(box_remap, dtype=np.int32)).clip(0, 0, W, H).decouple()
                 h = bot - top
