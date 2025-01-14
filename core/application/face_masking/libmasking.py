@@ -18,9 +18,6 @@ from ...utils.resource import Resource
 from ... import XManager
 
 
-__version__ = '0.1.0'
-logging.error('face_masking version: {}'.format(__version__))
-
 
 class LibMasking:
     """
@@ -69,25 +66,25 @@ class LibMasking:
         #     cv2.imwrite(R'N:\archive\2024\1126-video\DanceShow2\01\cache\{}.png'.format(identity), bgr_style)
         # LibMasking.maskingVideo(path_in_video, options_dict, path_out_video_masking, path_in_json=path_out_json)
 
-        path_in_video = R'N:\archive\2024\1126-video\Stuff\input3.mp4'
-        path_out_json = R'N:\archive\2024\1126-video\Stuff\input3.json'
-        path_out_video_scanning = R'N:\archive\2024\1126-video\Stuff\input3-scanning.mp4'
-        path_out_video_masking = R'N:\archive\2024\1126-video\Stuff\input3-masking-load.mp4'
-        # video_info = LibMasking.scanningVideo(path_in_video, path_out_json=path_out_json, path_out_video=path_out_video_scanning)
-        video_info = VideoInfo.loadVideoInfo(path_in_json=path_out_json)
+        path_in_video = R'N:\archive\2024\1126-video\Non\input.mp4'
+        path_out_json = R'N:\archive\2024\1126-video\Non\input.json'
+        path_out_video_scanning = R'N:\archive\2024\1126-video\Non\input-scanning-xxxx.mp4'
+        # path_out_video_masking = R'N:\archive\2024\1126-video\Stuff\online\02\input-masking-3.mp4'
+        video_info = LibMasking.scanningVideo(path_in_video, path_out_json=path_out_json, path_out_video=path_out_video_scanning, fixed_num=5)
+        # video_info = VideoInfo.loadVideoInfo(path_in_json=path_out_json)
         # options_dict = dict()
         # for identity, data in video_info.getIdentityPreviewDict().items():
         #     bgr, box = data['image'], data['box']
         #     print(data['index_frame'], data['box'], data['box_score'])
         #     bgr_style, crop_box = LibCartoonWrapperQ.inference(np.copy(bgr), np.array(box, dtype=np.int32).tolist())
-        #     options_dict[identity] = MaskingOption(301, dict(bgr=bgr_style, box=crop_box))
-        #     cv2.imwrite(R'N:\archive\2024\1126-video\Stuff\input3-{}.png'.format(identity), bgr_style)
+        #     cv2.imwrite(R'N:\archive\2024\1126-video\Stuff\input2-{}.png'.format(identity), bgr_style)
+        #     options_dict[identity] = MaskingOption(301, dict(bgr=bgr_style, box=crop_box[identity-1]))
+        # options_dict = MaskingOption.getRandomMaskingOptionDict(video_info.person_identity_history)
         # options_dict = {
-        #     1: MaskingOption(301, dict(bgr=cv2.imread(R'N:\archive\2024\1202-mosaic\test\1.png', cv2.IMREAD_UNCHANGED), box=[[209, 94, 339, 223], [165, 10, 382, 228]])),
-        #     2: MaskingOption(301, dict(bgr=cv2.imread(R'N:\archive\2024\1202-mosaic\test\2.png', cv2.IMREAD_UNCHANGED), box=[[518, 154, 589, 226], [493, 108, 613, 228]])),
+        #     1: MaskingOption(301, dict(bgr=cv2.imread(R'N:\archive\2024\1126-video\Stuff\online\face\1.png', cv2.IMREAD_UNCHANGED), box=[[346, 290, 408, 354], [324, 250, 429, 355]])),
+        #     2: MaskingOption(301, dict(bgr=cv2.imread(R'N:\archive\2024\1126-video\Stuff\online\face\2.png', cv2.IMREAD_UNCHANGED), box=[[158, 281, 207, 329], [141, 249, 223, 331]])),
         # }
-        options_dict = MaskingOption.getRandomMaskingOptionDict(video_info.person_identity_history)
-        LibMasking.maskingVideo(path_in_video, options_dict, path_out_video_masking, path_in_json=path_out_json)
+        # LibMasking.maskingVideo(path_in_video, options_dict, path_out_video_masking, path_in_json=path_out_json)
 
     """
     """
