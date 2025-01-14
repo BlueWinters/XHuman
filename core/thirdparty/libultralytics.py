@@ -46,3 +46,8 @@ class LibUltralyticsWrapper:
 
     def __getitem__(self, name: str):
         return self.getSpecific(name)
+
+    def resetTracker(self, name):
+        if name in self.model_dict:
+            self.model_dict[name].predictor.trackers[0].reset()
+

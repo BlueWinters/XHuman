@@ -46,6 +46,8 @@ class Person:
     def loadFromDict(info_dict):
         person = Person(info_dict['identity'])
         person.frame_info_list = [PersonFrameInfo.fromString(each) for each in info_dict['frame_info_list']]
+        if 'preview' in info_dict:
+            person.loadPreviewFromJson(info_dict['preview'])
         return person
 
     """
@@ -118,14 +120,21 @@ class Person:
     def setIdentityPreview(self, index_frame, bgr, box_face, box_face_score):
         if self.preview is None:
             lft, top, rig, bot = box_face
-            self.preview = dict(index_frame=index_frame, box=box_face, box_score=box_face_score,
-                                image=np.copy(bgr), face=np.copy(bgr[top:bot, lft:rig]))
+            self.preview = dict(
+                index_frame=index_frame, box=box_face, box_score=box_face_score,
+                image=np.copy(bgr), face=np.copy(bgr[top:bot, lft:rig]))
         else:
             # just update the preview face
             if box_face_score < self.preview['box_score']:
                 lft, top, rig, bot = box_face
-                self.preview = dict(index_frame=index_frame, box=box_face, box_score=box_face_score,
-                                    image=np.copy(bgr), face=np.copy(bgr[top:bot, lft:rig]))
+                self.preview = dict(
+                    index_frame=index_frame, box=box_face, box_score=box_face_score,
+                    image=np.copy(bgr), face=np.copy(bgr[top:bot, lft:rig]))
+
+    def loadPreviewFromJson(self, info):
+        if self.preview is None:
+            self.preview = dict(
+                index_frame=info['index_frame'], box=info['box_face'], box_score=info['box_face_score'], image=None, face=None)
 
     """
     """
@@ -435,6 +444,10 @@ class LibScaner:
         return False
 
     @staticmethod
+    def resetYOLOTracker():
+        XManager.getModules('ultralytics').resetTracker('yolo11m-pose')
+
+    @staticmethod
     def updateWithYOLO(index_frame, cache, video_info: VideoInfo):
         module = XManager.getModules('ultralytics')['yolo11m-pose']
         person_list_new = []
@@ -442,66 +455,56 @@ class LibScaner:
         result = module.track(cache.bgr, persist=True, conf=0.25, iou=0.7, classes=[0], tracker='bytetrack.yaml', verbose=False)[0]
         number = len(result)
         # num_max = min(number, video_info.person_fixed_num) if video_info.isFixedNumber else number
-        cls = np.reshape(np.round(result.boxes.cls.numpy()).astype(np.int32), (-1,))
-        box = np.reshape(np.round(result.boxes.xyxy.numpy()).astype(np.int32), (-1, 4,))
-        points = np.reshape(result.keypoints.data.cpu().numpy().astype(np.float32), (-1, 17, 3))
-        score = np.reshape(result.boxes.conf.numpy().astype(np.float32), (-1,))
-        identity = np.reshape(result.boxes.id.numpy().astype(np.int32), (-1,))
-
-        # update common(tracking without lose)
-        index_list = np.argsort(score)[::-1].tolist()
-        for i, n in enumerate(index_list):
-            cur_one_box_tracker = box[n, :]  # 4: lft,top,rig,bot
-            cur_one_box_face, box_face_score = LibScaner.transformPoints2FaceBox(cache.bgr, points[n, :, :], cur_one_box_tracker)
-            box_face_score = box_face_score if LibScaner.hasOverlap(box, n) is False and number == video_info.person_fixed_num else 4
-            index = LibScaner.matchPrevious(video_info.person_list_current, int(identity[n]))
-            if cls[n] != 0:
-                index_list.remove(n)
-                continue  # only person id needed
-            if index != -1:
-                person_cur = video_info.person_list_current.pop(index)
-                assert isinstance(person_cur, Person)
-                person_cur.appendInfo(index_frame, cache.bgr, cur_one_box_tracker, cur_one_box_face, box_face_score)
-                person_list_new.append(person_cur)
-                index_list.remove(n)
-                #
-                # if index_frame % 32 == 0:
-                #     lft, top, rig, bot = cur_one_box_tracker
-                #     cv2.imwrite(R'N:\archive\2024\1126-video\DanceShow2\01\test\reid\{}-{}.png'.format(int(identity[n]), index_frame), cache.bgr[top:bot, lft:rig, :])
-                #     points_new = np.copy(points[n, :, :])
-                #     points_new[:, 0] = np.clip(points_new[:, 0] - lft, 0, cache.shape[1])
-                #     points_new[:, 1] = np.clip(points_new[:, 1] - top, 0, cache.shape[0])
-                #     data = [dict(keypoints=points_new.tolist(), is_target=True),]
-                #     json.dump(data, open(R'N:\archive\2024\1126-video\DanceShow2\01\test\reid\{}-{}.json'.format(int(identity[n]), index_frame), 'w'), indent=4)
-                continue
-
-        # update from history
-        for i, n in enumerate(index_list):
-            cur_one_box_tracker = box[n, :]  # 4: lft,top,rig,bot
-            cur_one_box_face, box_face_score = LibScaner.transformPoints2FaceBox(cache.bgr, points[n, :, :], cur_one_box_tracker)
-            box_face_score = box_face_score if LibScaner.hasOverlap(box, n) is False and number == video_info.person_fixed_num else 4
-            iou_max_idx, iou_max_val, dis_min_idx, dis_min_val = LibScaner.findBestMatch(video_info.person_list_current, cur_one_box_tracker)
-            if iou_max_idx != -1 and (iou_max_val > LibScaner.IOU_Threshold or video_info.isFixedNumber):
-                person_cur = video_info.person_list_current.pop(iou_max_idx)
-                assert isinstance(person_cur, Person)
-                person_cur.appendInfo(index_frame, cache.bgr, cur_one_box_tracker, cur_one_box_face, box_face_score)
-                person_list_new.append(person_cur)
-            else:
-                if np.sum(cur_one_box_face) > 0:
-                    # create a new person
-                    person_new = video_info.createNewPerson(index_frame, cache.bgr, cur_one_box_tracker, cur_one_box_face, box_face_score)
-                    if person_new is None:
-                        if len(video_info.person_list_current) == 0:
-                            continue
-                        person_cur = video_info.person_list_current.pop(dis_min_idx)
-                        assert isinstance(person_cur, Person)
-                        person_cur.appendInfo(index_frame, cache.bgr, cur_one_box_tracker, cur_one_box_face, box_face_score)
-                        person_list_new.append(person_cur)
-                    else:
-                        person_list_new.append(person_new)
+        if number > 0 and result.boxes.id is not None:
+            cls = np.reshape(np.round(result.boxes.cls.cpu().numpy()).astype(np.int32), (-1,))
+            box = np.reshape(np.round(result.boxes.xyxy.cpu().numpy()).astype(np.int32), (-1, 4,))
+            points = np.reshape(result.keypoints.data.cpu().numpy().astype(np.float32), (-1, 17, 3))
+            score = np.reshape(result.boxes.conf.cpu().numpy().astype(np.float32), (-1,))
+            identity = np.reshape(result.boxes.id.cpu().numpy().astype(np.int32), (-1,))
+            # update common(tracking without lose)
+            index_list = np.argsort(score)[::-1].tolist()
+            for i, n in enumerate(index_list):
+                cur_one_box_tracker = box[n, :]  # 4: lft,top,rig,bot
+                cur_one_box_face, box_face_score = LibScaner.transformPoints2FaceBox(cache.bgr, points[n, :, :], cur_one_box_tracker)
+                box_face_score = box_face_score if LibScaner.hasOverlap(box, n) is False and number == video_info.person_fixed_num else 4
+                index = LibScaner.matchPrevious(video_info.person_list_current, int(identity[n]))
+                if cls[n] != 0:
+                    index_list.remove(n)
+                    continue  # only person id needed
+                if index != -1:
+                    person_cur = video_info.person_list_current.pop(index)
+                    assert isinstance(person_cur, Person)
+                    person_cur.appendInfo(index_frame, cache.bgr, cur_one_box_tracker, cur_one_box_face, box_face_score)
+                    person_list_new.append(person_cur)
+                    index_list.remove(n)
+                    continue
+            # update from history
+            for i, n in enumerate(index_list):
+                cur_one_box_tracker = box[n, :]  # 4: lft,top,rig,bot
+                cur_one_box_face, box_face_score = LibScaner.transformPoints2FaceBox(cache.bgr, points[n, :, :], cur_one_box_tracker)
+                box_face_score = box_face_score if LibScaner.hasOverlap(box, n) is False and number == video_info.person_fixed_num else 4
+                iou_max_idx, iou_max_val, dis_min_idx, dis_min_val = LibScaner.findBestMatch(video_info.person_list_current, cur_one_box_tracker)
+                if iou_max_idx != -1 and (iou_max_val > LibScaner.IOU_Threshold or video_info.isFixedNumber):
+                    person_cur = video_info.person_list_current.pop(iou_max_idx)
+                    assert isinstance(person_cur, Person)
+                    person_cur.appendInfo(index_frame, cache.bgr, cur_one_box_tracker, cur_one_box_face, box_face_score)
+                    person_list_new.append(person_cur)
                 else:
-                    # skip the unreliable face box
-                    pass
+                    if np.sum(cur_one_box_face) > 0:
+                        # create a new person
+                        person_new = video_info.createNewPerson(index_frame, cache.bgr, cur_one_box_tracker, cur_one_box_face, box_face_score)
+                        if person_new is None:
+                            if len(video_info.person_list_current) == 0:
+                                continue
+                            person_cur = video_info.person_list_current.pop(dis_min_idx)
+                            assert isinstance(person_cur, Person)
+                            person_cur.appendInfo(index_frame, cache.bgr, cur_one_box_tracker, cur_one_box_face, box_face_score)
+                            person_list_new.append(person_cur)
+                        else:
+                            person_list_new.append(person_new)
+                    else:
+                        # skip the unreliable face box
+                        pass
         # update current person list
         video_info.updatePersonList(person_list_new)
         # set fixed number
@@ -521,6 +524,7 @@ class LibScaner:
                         # LibScaner.updateCommon(n, cache, video_info)
                         LibScaner.updateWithYOLO(n, cache, video_info)
                     bar.update(1)
+                LibScaner.resetYOLOTracker()
                 video_info.updatePersonList([])  # end the update
                 if 'path_out_json' in kwargs and isinstance(kwargs['path_out_json'], str):
                     video_info.dumpInfoToJson(kwargs['path_out_json'])
