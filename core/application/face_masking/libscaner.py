@@ -134,7 +134,7 @@ class Person:
     def loadPreviewFromJson(self, info):
         if self.preview is None:
             self.preview = dict(
-                index_frame=info['index_frame'], box=info['box_face'], box_score=info['box_face_score'], image=None, face=None)
+                index_frame=info['index_frame'], box=info['box_face'], box_score=info['box_score'], image=None, face=None)
 
     """
     """
