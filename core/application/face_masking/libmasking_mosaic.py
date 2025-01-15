@@ -241,32 +241,32 @@ class LibMasking_Mosaic:
             vis_boundary = parameters['vis_boundary'] if 'vis_boundary' in parameters else False
             mosaic_bgr, super_pixels = LibMasking_Mosaic.inferenceBoxWithMosaicPolygon(
                 bgr, box, n_div, vis_boundary=vis_boundary, focus_type=focus_type, super_pixels=super_pixels)
-            # parameters['super_pixels'] = super_pixels
+            parameters['super_pixels'] = super_pixels
             return mosaic_bgr
         # specific config
         if mosaic_type == 'mosaic_pixel_polygon_small':
             # n_div = parameters['n_div'] if 'n_div' in parameters else 8
             mosaic_bgr, super_pixels = LibMasking_Mosaic.inferenceBoxWithMosaicPolygon(
                 bgr, box, 16, vis_boundary=False, focus_type=focus_type, super_pixels=super_pixels)
-            # parameters['super_pixels'] = super_pixels
+            parameters['super_pixels'] = super_pixels
             return mosaic_bgr
         if mosaic_type == 'mosaic_pixel_polygon_small_line':
             # n_div = parameters['n_div'] if 'n_div' in parameters else 8
             mosaic_bgr, super_pixels = LibMasking_Mosaic.inferenceBoxWithMosaicPolygon(
                 bgr, box, 16, vis_boundary=True, focus_type=focus_type, super_pixels=super_pixels)
-            # parameters['super_pixels'] = super_pixels
+            parameters['super_pixels'] = super_pixels
             return mosaic_bgr
         if mosaic_type == 'mosaic_pixel_polygon_big':
             # n_div = parameters['n_div'] if 'n_div' in parameters else 16
             mosaic_bgr, super_pixels = LibMasking_Mosaic.inferenceBoxWithMosaicPolygon(
                 bgr, box, 32, vis_boundary=False, focus_type=focus_type, super_pixels=super_pixels)
-            # parameters['super_pixels'] = super_pixels
+            parameters['super_pixels'] = super_pixels
             return mosaic_bgr
         if mosaic_type == 'mosaic_pixel_polygon_big_line':
             # n_div = parameters['n_div'] if 'n_div' in parameters else 16
             mosaic_bgr, super_pixels = LibMasking_Mosaic.inferenceBoxWithMosaicPolygon(
                 bgr, box, 32, vis_boundary=True, focus_type=focus_type, super_pixels=super_pixels)
-            # parameters['super_pixels'] = super_pixels
+            parameters['super_pixels'] = super_pixels
             return mosaic_bgr
         raise NotImplementedError(parameters)
 
