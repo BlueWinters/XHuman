@@ -8,8 +8,8 @@ class BoundingBox(Rectangle):
         super(BoundingBox, self).__init__(points)
 
     def expand4(self, ratio_lft: float, ratio_top: float, ratio_rig: float, ratio_bot: float):
-        assert ratio_lft > 0 and ratio_rig > 0, (ratio_lft, ratio_rig)
-        assert ratio_top > 0 and ratio_bot > 0, (ratio_top, ratio_bot)
+        assert ratio_lft >= 0 and ratio_rig >= 0, (ratio_lft, ratio_rig)
+        assert ratio_top >= 0 and ratio_bot >= 0, (ratio_top, ratio_bot)
         w = self.width
         h = self.height
         self.x_min = self.x_min - w * ratio_lft
