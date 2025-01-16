@@ -1,7 +1,7 @@
 
 import logging
 
-__version__ = '0.1.4'
+__version__ = '0.1.5'
 logging.error('face_masking version: {}'.format(__version__))
 
 """
@@ -13,4 +13,6 @@ version - 0.1.3
     note: fix bug in bounding box calculation 
 version - 0.1.4
     note: runtime optimization for mosaic polygon method
+version - 0.1.5
+    note: add schedule call function
 """

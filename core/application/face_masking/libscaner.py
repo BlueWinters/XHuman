@@ -517,6 +517,7 @@ class LibScaner:
             with tqdm.tqdm(total=len(reader_iterator)) as bar:
                 sample_step = kwargs.pop('sample_step', 1)
                 fixed_num = kwargs.pop('fixed_num', -1)
+                schedule_call = kwargs.pop('schedule_call', lambda *_args, **_kwargs: None)
                 video_info = VideoInfo(fixed_num=fixed_num)
                 for n, source in enumerate(reader_iterator):
                     if n % sample_step == 0:
@@ -524,9 +525,11 @@ class LibScaner:
                         # LibScaner.updateCommon(n, cache, video_info)
                         LibScaner.updateWithYOLO(n, cache, video_info)
                     bar.update(1)
+                    schedule_call('扫描视频-运行中', float((n+1)/len(reader_iterator)))
                 LibScaner.resetYOLOTracker()
                 video_info.updatePersonList([])  # end the update
                 if 'path_out_json' in kwargs and isinstance(kwargs['path_out_json'], str):
+                    schedule_call('扫描视频-后处理', None)
                     video_info.dumpInfoToJson(kwargs['path_out_json'])
                 return video_info
 
@@ -535,9 +538,12 @@ class LibScaner:
         with XContextTimer(True) as context:
             cache = LibScaner.packageAsCache(source)
             video_info = VideoInfo(fixed_num=-1)
+            schedule_call = kwargs.pop('schedule_call', lambda *_args, **_kwargs: None)
+            schedule_call('扫描图片-运行中', None)
             LibScaner.updateCommon(0, cache, video_info)
             video_info.updatePersonList([])  # end the update
             if 'path_out_json' in kwargs and isinstance(kwargs['path_out_json'], str):
+                schedule_call('扫描图片-后处理', None)
                 video_info.dumpInfoToJson(kwargs['path_out_json'])
             return video_info
 
