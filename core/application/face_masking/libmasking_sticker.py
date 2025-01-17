@@ -172,6 +172,21 @@ class LibMasking_Sticker:
                 bgr_copy = np.copy(bgr)
                 bgr_copy[top:bot, lft:rig, :] = fusion_bgr
                 return bgr_copy
+            if 'paste' in sticker:
+                ltrb_ori, ltrb = sticker['paste']
+                image_c = bgr[ltrb[1]:ltrb[3], ltrb[0]:ltrb[2], :]
+                # image_ori_c = bgr[ltrb_ori[1]:ltrb_ori[3], ltrb_ori[0]:ltrb_ori[2], :]
+                w_ori = ltrb[2] - ltrb[0]
+                h_ori = ltrb[3] - ltrb[1]
+                result_nd = sticker_image[:, :, :3]
+                result_alpha = sticker_image[:, :, 3]
+                result_nd_resize = cv2.resize(result_nd, (w_ori, h_ori))
+                result_alpha_resize = cv2.resize(result_alpha, (w_ori, h_ori))
+                result_alpha_resize = result_alpha_resize[:, :, np.newaxis] / 255.0
+                image_C_cartoon = result_nd_resize * result_alpha_resize + (1 - result_alpha_resize) * image_c
+                bgr_copy = np.copy(bgr)
+                bgr_copy[ltrb[1]:ltrb[3], ltrb[0]:ltrb[2], :] = image_C_cartoon
+                return bgr_copy
 
     """
     """
