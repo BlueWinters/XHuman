@@ -1,7 +1,7 @@
 
 import logging
 
-__version__ = '0.1.6'
+__version__ = '0.2.0'
 logging.error('face_masking version: {}'.format(__version__))
 
 """
@@ -17,5 +17,7 @@ version - 0.1.5
     note: add schedule call function
 version - 0.1.6
     note: fix bug in sticker
+version - 0.2.0
+    note: optimization masking video time
 """
 
