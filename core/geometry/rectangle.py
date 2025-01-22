@@ -82,13 +82,24 @@ class Rectangle:
         return (self.y_max - self.y_min + 1) * (self.x_max - self.x_min + 1)
 
     def expand(self, ratio_x: float, ratio_y: float):
-        assert ratio_x > 0 and ratio_y > 0, (ratio_x, ratio_y)
+        assert ratio_x >= 0 and ratio_y >= 0, (ratio_x, ratio_y)
         w = self.width
         h = self.height
         self.x_min = self.x_min - w * ratio_x
         self.x_max = self.x_max + w * ratio_x
         self.y_min = self.y_min - h * ratio_y
         self.y_max = self.y_max + h * ratio_y
+        return self
+
+    def expand4(self, ratio_lft: float, ratio_top: float, ratio_rig: float, ratio_bot: float):
+        assert ratio_lft >= 0 and ratio_rig >= 0, (ratio_lft, ratio_rig)
+        assert ratio_top >= 0 and ratio_bot >= 0, (ratio_top, ratio_bot)
+        w = self.width
+        h = self.height
+        self.x_min = self.x_min - w * ratio_lft
+        self.x_max = self.x_max + w * ratio_top
+        self.y_min = self.y_min - h * ratio_rig
+        self.y_max = self.y_max + h * ratio_bot
         return self
 
     def clip(self, xx_min, yy_min, xx_max, yy_max):

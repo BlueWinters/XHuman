@@ -151,7 +151,7 @@ class Person:
                 return self.data[self.index-1]
 
             def update(self):
-                self.index += 1
+                self.index = min(self.index + 1, len(self.data) - 1)
 
             def __len__(self):
                 assert len(self.data)
@@ -160,6 +160,31 @@ class Person:
                 return '{}, {}'.format(self.index, len(self.data))
 
         return AsynchronousCursor(self.frame_info_list)
+
+    def getInfoIterator2(self, idx_beg, idx_end):
+        class AsynchronousCursor:
+            def __init__(self, data, beg, end):
+                self.beg = beg
+                self.end = end
+                self.index = beg
+                self.data = data
+
+            def next(self):
+                return self.data[self.index]
+
+            def update(self):
+                self.index = min(self.index + 1, self.end)
+
+            def __len__(self):
+                assert len(self.data)
+
+            def __str__(self):
+                return '{}, {}'.format(self.index, len(self.data))
+
+        frame_index_array = np.array([info.index_frame for info in self.frame_info_list], dtype=np.int32)
+        beg_pre_idx = int(np.argwhere(idx_beg <= frame_index_array)[0])
+        end_aft_idx = int(np.argwhere(frame_index_array <= idx_end)[-1])
+        return AsynchronousCursor(self.frame_info_list, beg_pre_idx, end_aft_idx)
 
 
 class VideoInfo:
@@ -244,6 +269,24 @@ class VideoInfo:
             return resized if is_bgr is True else cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
 
         return [transform(person.preview) for person in self.getSortedHistory()]
+
+    def getInfoIterator(self, min_seconds):
+        iterator_list = [(person, person.getInfoIterator()) for person in self.person_identity_history
+                         if len(person.frame_info_list) > min_seconds]
+        return iterator_list
+
+    def getSplitInfoIterator(self, num_frames, num_split, min_seconds):
+        each_len = int(np.ceil(num_frames / num_split))
+        beg_end_list = [(n*each_len, min((n+1)*each_len-1, num_frames)) for n in range(num_split)]
+        person_remain_list = [person for person in self.person_identity_history if len(person.frame_info_list) > min_seconds]
+        iterator_list_all = []
+        for beg, end in beg_end_list:
+            iterator_list = []
+            for person in person_remain_list:
+                assert isinstance(person, Person)
+                iterator_list.append((person, person.getInfoIterator2(beg, end)))
+            iterator_list_all.append(dict(beg=beg, end=end, iterator_list=iterator_list))
+        return iterator_list_all
 
     @staticmethod
     def loadVideoInfo(**kwargs):

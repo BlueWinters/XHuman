@@ -1,3 +1,4 @@
+
 import copy
 import os
 import logging
@@ -138,7 +139,7 @@ class XVideoWriter:
                 return True
         return False
 
-    def write(self, image:np.ndarray):
+    def write(self, image: np.ndarray):
         assert len(image.shape) == 3 and image.shape[2] == 3, image.shape
         if self.h == -1 or self.w == -1:
             self.h, self.w = image.shape[:2]
@@ -148,8 +149,9 @@ class XVideoWriter:
             image = self.visualFrameNumber(np.copy(image), self.counter)
         self.writer(image)
 
-    def dump(self, bgr_list:List[np.ndarray]):
-        for bgr in bgr_list:
+    def dump(self, bgr_list: List[np.ndarray]):
+        for index, bgr in bgr_list:
+            assert self.counter == index, (self.counter, index)
             self.write(bgr)
 
 
@@ -163,7 +165,6 @@ class XVideoWriterSynchronous(XVideoWriter):
     def _serializeYield(self, writer:cv2.VideoWriter):
         self.counter = 0
         while True:
-            self.counter += 1
             image = yield self
             writer.write(image)
 
