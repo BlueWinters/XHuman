@@ -8,6 +8,7 @@ import skimage
 import pickle
 import typing
 import tqdm
+import numba
 from ...geometry import Rectangle
 from ...base import XPortrait, XPortraitHelper
 from ...utils.context import XContextTimer
@@ -79,7 +80,7 @@ class LibMasking_Blur:
     def doWithGaussianBlur(bgr, kernel=15, blur_size=256):
         format_bgr, padding = LibMasking_Blur.formatSizeWithPaddingForward(bgr, blur_size, blur_size)
         kernel = kernel if kernel % 2 == 1 else (kernel + 1)  # should be odd
-        blured_bgr = cv2.GaussianBlur(format_bgr, (kernel, kernel), kernel // 2, kernel // 2)
+        blured_bgr = cv2.GaussianBlur(format_bgr, (kernel, kernel), sigmaX=kernel // 2, sigmaY=kernel // 2)
         reformat_blur_bgr = LibMasking_Blur.formatSizeWithPaddingBackward(bgr, blured_bgr, padding)
         return reformat_blur_bgr
 
@@ -97,9 +98,23 @@ class LibMasking_Blur:
         return reformat_blur_bgr
 
     @staticmethod
-    def doWithBlurWater(bgr, A=2.0, B=8.0):
+    @numba.jit(nopython=True, nogil=True, parallel=True)
+    def maskingWithBlurWaterJit(bgr, bgr_copy, int_x, int_y, x_new, y_new):
         h, w, c = bgr.shape
-        bgr_copy = np.copy(bgr)
+        for ii in numba.prange(h):
+            for jj in numba.prange(w):
+                new_xx = int_x[ii, jj]
+                new_yy = int_y[ii, jj]
+                if x_new[ii, jj] < 0 or x_new[ii, jj] > w - 1:
+                    continue
+                if y_new[ii, jj] < 0 or y_new[ii, jj] > h - 1:
+                    continue
+                bgr_copy[ii, jj, :] = bgr[new_yy, new_xx, :]
+        return bgr_copy
+
+    @staticmethod
+    def getBlurWaterParameters(bgr, A=2.0, B=8.0):
+        h, w, c = bgr.shape
         # A = 2.0  # rotation degree
         # B = 8.0  # each water length
         center_x = (w - 1) / 2.0
@@ -119,16 +134,27 @@ class LibMasking_Blur:
         int_x = int_x.astype(int)
         int_y = np.floor(y_new)
         int_y = int_y.astype(int)
-        for ii in range(h):
-            for jj in range(w):
-                new_xx = int_x[ii, jj]
-                new_yy = int_y[ii, jj]
-                if x_new[ii, jj] < 0 or x_new[ii, jj] > w - 1:
-                    continue
-                if y_new[ii, jj] < 0 or y_new[ii, jj] > h - 1:
-                    continue
-                bgr_copy[ii, jj, :] = bgr[new_yy, new_xx, :]
-        return bgr_copy
+        return int_x, int_y, x_new, y_new
+
+    @staticmethod
+    def doWithBlurWater(bgr, A=2.0, B=8.0, map_coordinates=None):
+        if map_coordinates is None:
+            map_coordinates = LibMasking_Blur.getBlurWaterParameters(bgr, A, B)
+        assert len(map_coordinates) == 4, len(map_coordinates)
+        int_x, int_y, x_new, y_new = map_coordinates
+        h, w, c = bgr.shape
+        bgr_copy = np.copy(bgr)
+        # for ii in range(h):
+        #     for jj in range(w):
+        #         new_xx = int_x[ii, jj]
+        #         new_yy = int_y[ii, jj]
+        #         if x_new[ii, jj] < 0 or x_new[ii, jj] > w - 1:
+        #             continue
+        #         if y_new[ii, jj] < 0 or y_new[ii, jj] > h - 1:
+        #             continue
+        #         bgr_copy[ii, jj, :] = bgr[new_yy, new_xx, :]
+        LibMasking_Blur.maskingWithBlurWaterJit(bgr, bgr_copy, int_x, int_y, x_new, y_new)
+        return bgr_copy, map_coordinates
 
     @staticmethod
     def doWithBlurDiffusion(bgr, k_neigh=11, pre_blur_kernel=3, post_blur_kernel=3):
@@ -200,7 +226,11 @@ class LibMasking_Blur:
         if blur_type == 'blur_water':
             rotation_degree = parameters['rotation_degree'] if 'rotation_degree' in parameters else 2
             water_length = parameters['water_length'] if 'water_length' in parameters else 8
-            return LibMasking_Blur.inferenceOnBox_WithBlurWater(bgr, box, rotation_degree, water_length, focus_type=focus_type)
+            map_coordinates = parameters['map_coordinates'] if 'map_coordinates' in parameters else None
+            blur_bgr, map_coordinates = LibMasking_Blur.inferenceOnBox_WithBlurWater(
+                bgr, box, rotation_degree, water_length, focus_type=focus_type, map_coordinates=map_coordinates)
+            parameters['map_coordinates'] = map_coordinates
+            return blur_bgr
         if blur_type == 'blur_pencil':
             k_neigh = parameters['k_neigh'] if 'k_neigh' in parameters else 17
             pre_k = parameters['pre_k'] if 'pre_k' in parameters else 3
@@ -248,7 +278,7 @@ class LibMasking_Blur:
         return LibMasking_Blur.workOnSelected(bgr, blured_bgr, mask=mask)
 
     @staticmethod
-    def inferenceOnBox_WithBlurWater(bgr, box, a, b, focus_type):
+    def inferenceOnBox_WithBlurWater(bgr, box, a, b, focus_type, map_coordinates=None):
         h, w = bgr.shape[:2]
         lft, top, rig, bot = box
         if focus_type == 'face':
@@ -264,11 +294,11 @@ class LibMasking_Blur:
             mask = LibMasking_Blur.getMaskFromBox(h, w, box, ratio=0.)
         part = bgr[top:bot, lft:rig, :]
         resized = cv2.resize(part, (256, 256))
-        blured_bgr = LibMasking_Blur.doWithBlurWater(resized, a, b)
+        blured_bgr, map_coordinates = LibMasking_Blur.doWithBlurWater(resized, a, b, map_coordinates)
         blured_bgr = cv2.resize(blured_bgr, part.shape[:2][::-1])
         copy_bgr = np.copy(bgr)
         copy_bgr[top:bot, lft:rig, :] = blured_bgr
-        return LibMasking_Blur.workOnSelected(bgr, copy_bgr, mask=mask)
+        return LibMasking_Blur.workOnSelected(bgr, copy_bgr, mask=mask), map_coordinates
 
     @staticmethod
     def inferenceOnBox_WithBlurDiffusion(bgr, box, k_neigh, pre_k, post_k, focus_type):
