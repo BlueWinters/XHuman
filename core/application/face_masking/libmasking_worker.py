@@ -26,7 +26,7 @@ class WorkerLock:
         self.lock.acquire()
         try:
             self.bar.update(n)
-            self.call(self.bar.n)
+            self.call(float(self.bar.n)/self.bar.total)
         finally:
             self.lock.release()
 
@@ -43,7 +43,6 @@ class WorkerLock:
             logging.info(*args, **kwargs)
         finally:
             self.lock.release()
-
 
 
 class MaskingVideoWorker:
