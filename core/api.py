@@ -127,7 +127,9 @@ def getResultsFromFunctions(name, function, *args, **kwargs):
         >>> # 3.获得结果
         >>> path_video_out = 'path_video_out'
         >>> video_info_string = vido_info_string_to_save  # 加载vido_info_string_to_save保存的信息
-        >>> getResultsFromFunctions('face_masking', 'maskingVideo', bgr_input, masking_options_dict, path_video_out, video_info_string=video_info_string)
+        >>> num_workers = 4  # 并发处理数，原接口更名maskingVideoOld
+        >>> getResultsFromFunctions('face_masking', 'maskingVideo', bgr_input, masking_options_dict,
+        >>>     path_video_out, video_info_string=video_info_string, num_workers=num_workers)
     """
 
     configLogging()
