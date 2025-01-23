@@ -161,6 +161,8 @@ class LibMasking_Sticker:
                 h = bot - top
                 w = rig - lft
                 st_x, st_y, st_w, st_h = cv2.boundingRect(sticker_image[:, :, 3])
+                if st_w == 0 or st_h == 0:
+                    return np.copy(bgr)  # bug
                 sticker_image = sticker_image[st_y:st_y + st_h, st_x:st_x + st_w, ...]
                 resized_sticker = cv2.resize(sticker_image, (w, h))
                 sticker_bgr = resized_sticker[:, :, :3]
