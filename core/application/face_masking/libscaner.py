@@ -182,8 +182,10 @@ class Person:
                 return '{}, {}'.format(self.index, len(self.data))
 
         frame_index_array = np.array([info.index_frame for info in self.frame_info_list], dtype=np.int32)
-        beg_pre_idx = int(np.argwhere(idx_beg <= frame_index_array)[0])
-        end_aft_idx = int(np.argwhere(frame_index_array <= idx_end)[-1])
+        idx_beg_arg_where = np.argwhere(idx_beg <= frame_index_array)
+        beg_pre_idx = int(idx_beg_arg_where[0] if len(idx_beg_arg_where) > 0 else frame_index_array[0])
+        idx_end_arg_where = np.argwhere(frame_index_array <= idx_end)
+        end_aft_idx = int(idx_end_arg_where[-1] if len(idx_end_arg_where) > 0 else frame_index_array[-1])
         return AsynchronousCursor(self.frame_info_list, beg_pre_idx, end_aft_idx)
 
 
