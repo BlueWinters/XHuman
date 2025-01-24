@@ -118,15 +118,18 @@ class Person:
         return info
 
     def setIdentityPreview(self, index_frame, bgr, box_face, box_face_score):
+        h, w, c = bgr.shape
         if self.preview is None:
-            lft, top, rig, bot = box_face
+            # lft, top, rig, bot = box_face
+            lft, top, rig, bot = BoundingBox(box_face).expand(0.2, 0.2).clip(0, 0, w, h).asInt()
             self.preview = dict(
                 index_frame=index_frame, box=box_face, box_score=box_face_score,
                 image=np.copy(bgr), face=np.copy(bgr[top:bot, lft:rig]))
         else:
             # just update the preview face
             if box_face_score < self.preview['box_score']:
-                lft, top, rig, bot = box_face
+                # lft, top, rig, bot = box_face
+                lft, top, rig, bot = BoundingBox(box_face).expand(0.2, 0.2).clip(0, 0, w, h).asInt()
                 self.preview = dict(
                     index_frame=index_frame, box=box_face, box_score=box_face_score,
                     image=np.copy(bgr), face=np.copy(bgr[top:bot, lft:rig]))
@@ -175,17 +178,21 @@ class Person:
             def update(self):
                 self.index = min(self.index + 1, self.end)
 
+            def valid(self):
+                return bool(self.beg != self.end)
+
             def __len__(self):
                 assert len(self.data)
 
             def __str__(self):
-                return '{}, {}'.format(self.index, len(self.data))
+                return '{} - {}, {} == {}'.format(self.index, self.beg, self.end, len(self.data))
 
         frame_index_array = np.array([info.index_frame for info in self.frame_info_list], dtype=np.int32)
         idx_beg_arg_where = np.argwhere(idx_beg <= frame_index_array)
         beg_pre_idx = int(idx_beg_arg_where[0] if len(idx_beg_arg_where) > 0 else frame_index_array[0])
         idx_end_arg_where = np.argwhere(frame_index_array <= idx_end)
         end_aft_idx = int(idx_end_arg_where[-1] if len(idx_end_arg_where) > 0 else frame_index_array[-1])
+        # assert beg_pre_idx != end_aft_idx, (beg_pre_idx, end_aft_idx)
         return AsynchronousCursor(self.frame_info_list, beg_pre_idx, end_aft_idx)
 
 
@@ -282,11 +289,14 @@ class VideoInfo:
         beg_end_list = [(n*each_len, min((n+1)*each_len-1, num_frames)) for n in range(num_split)]
         person_remain_list = [person for person in self.person_identity_history if len(person.frame_info_list) > min_seconds]
         iterator_list_all = []
-        for beg, end in beg_end_list:
+        for n, (beg, end) in enumerate(beg_end_list):
             iterator_list = []
             for person in person_remain_list:
                 assert isinstance(person, Person)
-                iterator_list.append((person, person.getInfoIterator2(beg, end)))
+                it = person.getInfoIterator2(beg, end)
+                if it.valid() is True:
+                    iterator_list.append((person, it))
+                # print('{}(id-{}): {}'.format(n, person.identity, str(iterator_list[-1][-1])))
             iterator_list_all.append(dict(beg=beg, end=end, iterator_list=iterator_list))
         return iterator_list_all
 

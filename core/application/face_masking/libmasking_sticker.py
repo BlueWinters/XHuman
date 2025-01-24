@@ -104,7 +104,7 @@ class LibMasking_Sticker:
         if isinstance(sticker, dict):
             sticker_image = sticker['bgr']
             if 'eyes_center' in sticker:
-                ratio = 0.5
+                ratio = 1.
                 h, w, c = bgr.shape
                 lft, top, rig, bot = box
                 hh = bot - top
@@ -129,7 +129,7 @@ class LibMasking_Sticker:
                 bgr_copy[top:bot, lft:rig, :] = fusion_bgr
                 return bgr_copy
             if 'align' in sticker:
-                ratio = 0.5
+                ratio = 0.8
                 h, w, c = bgr.shape
                 lft, top, rig, bot = box
                 hh = bot - top

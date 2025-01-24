@@ -254,7 +254,7 @@ class LibMasking_Blur:
             mask[top:bot, lft:rig] = LibMasking_Blur.getFaceMaskByPoints(bgr, box)
         elif focus_type == 'head':
             mask = np.zeros(shape=(h, w), dtype=np.uint8)
-            lft, top, rig, bot = Rectangle(box).toSquare().expand(0.5, 0.5).clip(0, 0, w, h).asInt()
+            lft, top, rig, bot = Rectangle(box).toSquare().expand(1., 1).clip(0, 0, w, h).asInt()
             mask[top:bot, lft:rig] = LibMasking_Blur.getHeadMask(XPortrait(bgr[top:bot, lft:rig, :]))
             mask[box[3]:, :] = 0
         else:
@@ -272,7 +272,7 @@ class LibMasking_Blur:
             mask[top:bot, lft:rig] = LibMasking_Blur.getFaceMaskByPoints(bgr, box)
         elif focus_type == 'head':
             mask = np.zeros(shape=(h, w), dtype=np.uint8)
-            lft, top, rig, bot = Rectangle(box).toSquare().expand(0.5, 0.5).clip(0, 0, w, h).asInt()
+            lft, top, rig, bot = Rectangle(box).toSquare().expand(1., 1.).clip(0, 0, w, h).asInt()
             mask[top:bot, lft:rig] = LibMasking_Blur.getHeadMask(XPortrait(bgr[top:bot, lft:rig, :]))
             mask[box[3]:, :] = 0
         else:
@@ -289,7 +289,7 @@ class LibMasking_Blur:
             mask[top:bot, lft:rig] = LibMasking_Blur.getFaceMaskByPoints(bgr, box)
         elif focus_type == 'head':
             mask = np.zeros(shape=(h, w), dtype=np.uint8)
-            lft, top, rig, bot = Rectangle(box).toSquare().expand(0.5, 0.5).clip(0, 0, w, h).asInt()
+            lft, top, rig, bot = Rectangle(box).toSquare().expand(1., 1.).clip(0, 0, w, h).asInt()
             mask[top:bot, lft:rig] = LibMasking_Blur.getHeadMask(XPortrait(bgr[top:bot, lft:rig, :]))
             mask[box[3]:, :] = 0
         else:
@@ -313,7 +313,7 @@ class LibMasking_Blur:
             mask[top:bot, lft:rig] = LibMasking_Blur.getFaceMaskByPoints(bgr, box)
         elif focus_type == 'head':
             mask = np.zeros(shape=(h, w), dtype=np.uint8)
-            lft, top, rig, bot = Rectangle(box).toSquare().expand(0.5, 0.5).clip(0, 0, w, h).asInt()
+            lft, top, rig, bot = Rectangle(box).toSquare().expand(1., 1.).clip(0, 0, w, h).asInt()
             mask[top:bot, lft:rig] = LibMasking_Blur.getHeadMask(XPortrait(bgr[top:bot, lft:rig, :]))
             mask[box[3]:, :] = 0
         else:

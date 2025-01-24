@@ -11,10 +11,7 @@ import numpy as np
 import tqdm
 import threading
 from .libscaner import *
-from ...utils.context import XContextTimer
-from ...utils.video import XVideoReader, XVideoWriter, XVideoWriterAsynchronous
-from ...utils.resource import Resource
-from ... import XManager
+from ...utils.video import XVideoReader, XVideoWriter
 
 
 class WorkerLock:
@@ -53,10 +50,10 @@ class WorkerLock:
 class MaskingVideoWorker(threading.Thread):
     """
     """
-    def __init__(self, num_seq, path_in_video, options_dict, iterator_dict, masking_function, worker_lock, verbose=True, debug=False):
-        super(MaskingVideoWorker, self).__init__(daemon=False)
+    def __init__(self, num_seq, image_list, options_dict, iterator_dict, masking_function, worker_lock, verbose=True, debug=False):
+        super(MaskingVideoWorker, self).__init__()
         self.num_seq = num_seq
-        self.reader = XVideoReader(path_in_video)
+        self.image_list = image_list
         self.iterator_list = iterator_dict['iterator_list']
         self.index_beg = iterator_dict['beg']
         self.index_end = iterator_dict['end']
@@ -95,66 +92,47 @@ class MaskingVideoWorker(threading.Thread):
             return self.masking_function(frame_index, frame_bgr, *args, **kwargs)
 
     def masking(self, *args, **kwargs):
-        self.reader.resetPositionByIndex(self.index_beg)
         frame_index = self.index_beg
-        for n, bgr in enumerate(self.reader):
+        counter = 0
+        for n, bgr in enumerate(self.image_list):
             if not bool(self.index_beg <= frame_index <= self.index_end):
                 break  # finish, just break
             # masking process
+            counter += 1
             for _, (person, it) in enumerate(self.iterator_list):
-                info = it.next()
-                if info.index_frame == frame_index:
-                    if person.identity in self.options_dict:
+                if person.identity in self.options_dict:
+                    info = it.next()
+                    if info.index_frame == frame_index:
                         masking_option = self.options_dict[person.identity]
                         bgr = self.trying(frame_index, bgr, info.box_face, masking_option)
-                    it.update()
+                        it.update()
+                    if info.index_frame < frame_index:
+                        it.update()
             self.worker_lock.update(self.num_seq, 1)
             self.result_list.append((frame_index, bgr))
             frame_index += 1
             if self.verbose is True:
                 self.worker_lock.info('{:<4d}: {:<4d}({:<4d},{:<4d})'.format(self.num_seq, n, self.index_beg, self.index_end))
-        self.worker_lock.warning('finish threading: {:<4d}({:<4d},{:<4d})'.format(self.num_seq, self.index_beg, self.index_end))
+        self.worker_lock.warning('finish threading {:<6d}({:<6s}): {:<4d}({:<4d},{:<4d} -- {:<4d})'.format(
+            self.ident, self.name, self.num_seq, self.index_beg, self.index_end, counter))
 
     def getResult(self):
         return self.result_list
 
     """
     """
-    @property
-    def info(self):
-        if platform.system().lower() == 'windows':
-            return print
-        if platform.system().lower() == 'linux':
-            return logging.info
-
-    @property
-    def warning(self):
-        if platform.system().lower() == 'windows':
-            return print
-        if platform.system().lower() == 'linux':
-            return logging.warning
-
-    @staticmethod
-    def createScheduleCallWithLock(lock, update_bar, update_function):
-        def function(name):
-            lock.acquire()
-            try:
-                update_bar.update(1)
-                update_function(name, update_bar.n)
-            finally:
-                lock.release()
-
-        assert isinstance(update_bar, tqdm.tqdm)
-        return function
-
     @staticmethod
     def createWorkers(num_workers, path_in_video, options_dict, iterator_list, masking_function, schedule_call, debug):
         num_split_max = multiprocessing.cpu_count()
         assert 0 < num_workers <= num_split_max, 'num split should be (0,{}], but is {}'.format(num_split_max, num_workers)
         worker_lock = WorkerLock(len(XVideoReader(path_in_video)), schedule_call)
         worker_list = []
+        reader = XVideoReader(path_in_video)
+        frame_list = reader.sampleFrames(0, reader.num_frame)
         for n in range(num_workers):
-            worker = MaskingVideoWorker(n, path_in_video, options_dict, iterator_list[n], masking_function, worker_lock, False, debug)
+            iterator_dict = iterator_list[n]
+            frame_beg, frame_end = iterator_dict['beg'], iterator_dict['end']
+            worker = MaskingVideoWorker(n, frame_list[frame_beg:frame_end+1], options_dict, iterator_dict, masking_function, worker_lock, False, debug)
             worker_list.append(worker)
         return worker_list
 
@@ -168,6 +146,10 @@ class MaskingVideoWorker(threading.Thread):
                 assert isinstance(worker, MaskingVideoWorker)
                 worker.join()
             logging.warning('finish masking parallel')
+            for worker in worker_list:
+                assert isinstance(worker, MaskingVideoWorker)
+                worker.worker_lock.info('seq-{}: exit code-{}, exception-{}, traceback-{}'.format(
+                    worker.num_seq, worker.exit_code, worker.exception, worker.exc_traceback))
         except Exception as e:
             raise e
 
@@ -181,6 +163,7 @@ class MaskingVideoWorker(threading.Thread):
         assert isinstance(config, dict)
         writer = XVideoWriter(config)
         writer.open(path_video_out)
+        writer.visual_index = True
         for worker in worker_list:
             assert isinstance(worker, MaskingVideoWorker)
             writer.dump(worker.getResult())
