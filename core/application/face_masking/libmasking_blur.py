@@ -8,7 +8,7 @@ import skimage
 import pickle
 import typing
 import tqdm
-import numba
+# import numba
 from ...geometry import Rectangle
 from ...base import XPortrait, XPortraitHelper
 from ...utils.context import XContextTimer
@@ -98,11 +98,13 @@ class LibMasking_Blur:
         return reformat_blur_bgr
 
     @staticmethod
-    @numba.jit(nopython=True, nogil=True, parallel=True)
+    # @numba.jit(nopython=True, nogil=True, parallel=True)
     def maskingWithBlurWaterJit(bgr, bgr_copy, int_x, int_y, x_new, y_new):
         h, w, c = bgr.shape
-        for ii in numba.prange(h):
-            for jj in numba.prange(w):
+        # for ii in numba.prange(h):
+        #     for jj in numba.prange(w):
+        for ii in range(h):
+            for jj in range(w):
                 new_xx = int_x[ii, jj]
                 new_yy = int_y[ii, jj]
                 if x_new[ii, jj] < 0 or x_new[ii, jj] > w - 1:
@@ -144,16 +146,16 @@ class LibMasking_Blur:
         int_x, int_y, x_new, y_new = map_coordinates
         h, w, c = bgr.shape
         bgr_copy = np.copy(bgr)
-        # for ii in range(h):
-        #     for jj in range(w):
-        #         new_xx = int_x[ii, jj]
-        #         new_yy = int_y[ii, jj]
-        #         if x_new[ii, jj] < 0 or x_new[ii, jj] > w - 1:
-        #             continue
-        #         if y_new[ii, jj] < 0 or y_new[ii, jj] > h - 1:
-        #             continue
-        #         bgr_copy[ii, jj, :] = bgr[new_yy, new_xx, :]
-        LibMasking_Blur.maskingWithBlurWaterJit(bgr, bgr_copy, int_x, int_y, x_new, y_new)
+        for ii in range(h):
+            for jj in range(w):
+                new_xx = int_x[ii, jj]
+                new_yy = int_y[ii, jj]
+                if x_new[ii, jj] < 0 or x_new[ii, jj] > w - 1:
+                    continue
+                if y_new[ii, jj] < 0 or y_new[ii, jj] > h - 1:
+                    continue
+                bgr_copy[ii, jj, :] = bgr[new_yy, new_xx, :]
+        # LibMasking_Blur.maskingWithBlurWaterJit(bgr, bgr_copy, int_x, int_y, x_new, y_new)
         return bgr_copy, map_coordinates
 
     @staticmethod
