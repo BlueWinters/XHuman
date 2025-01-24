@@ -1,7 +1,7 @@
 
 import logging
 
-__version__ = '0.2.3'
+__version__ = '0.2.4'
 logging.error('face_masking version: {}'.format(__version__))
 
 """
@@ -25,5 +25,7 @@ version - 0.2.2
     note: fix bug in scanning
 version - 0.2.3
     note: fix bug in sticker
+version - 0.2.4
+    note: fix bug in multi-thread
 """
 

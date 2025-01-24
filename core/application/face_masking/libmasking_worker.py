@@ -3,6 +3,8 @@ import logging
 import os
 import platform
 import multiprocessing
+import sys
+import traceback
 import typing
 import cv2
 import numpy as np
@@ -18,15 +20,18 @@ from ... import XManager
 class WorkerLock:
     def __init__(self, total, schedule_call):
         assert total > 0, total
+        self.total = total
         self.call = schedule_call
         self.lock = threading.Lock()
-        self.bar = tqdm.tqdm(total=total)
+        self.counter = 0  # tqdm.tqdm(total=total)
+        # self.bar = p_tqdm
 
-    def update(self, n=1):
+    def update(self, n_seq, n=1):
         self.lock.acquire()
         try:
-            self.bar.update(n)
-            self.call(float(self.bar.n)/self.bar.total)
+            # self.bar.update(n)
+            self.counter += n
+            self.call(float(self.counter) / self.total)
         finally:
             self.lock.release()
 
@@ -40,16 +45,16 @@ class WorkerLock:
     def warning(self, *args, **kwargs):
         self.lock.acquire()
         try:
-            logging.info(*args, **kwargs)
+            logging.warning(*args, **kwargs)
         finally:
             self.lock.release()
 
 
-class MaskingVideoWorker:
+class MaskingVideoWorker(threading.Thread):
     """
     """
-    def __init__(self, num_seq, path_in_video, options_dict, iterator_dict, masking_function, worker_lock, verbose=True):
-        super(MaskingVideoWorker, self).__init__()
+    def __init__(self, num_seq, path_in_video, options_dict, iterator_dict, masking_function, worker_lock, verbose=True, debug=False):
+        super(MaskingVideoWorker, self).__init__(daemon=False)
         self.num_seq = num_seq
         self.reader = XVideoReader(path_in_video)
         self.iterator_list = iterator_dict['iterator_list']
@@ -59,9 +64,37 @@ class MaskingVideoWorker:
         self.masking_function = masking_function
         self.worker_lock: WorkerLock = worker_lock
         self.verbose = verbose
+        self.debug = debug
         self.result_list = []
+        # exception
+        self.exit_code = 0
+        self.exception = None
+        self.exc_traceback = ''
 
     def run(self):
+        try:
+            self.masking()
+        except Exception as e:
+            self.exit_code = 1  # 0 is normal
+            self.exception = e
+            self.exc_traceback = ''.join(traceback.format_exception(*sys.exc_info()))
+
+    def join(self, timeout=None) -> None:
+        threading.Thread.join(self, timeout)
+        if self.exit_code == 1:
+            setattr(self.exception, 'traceback', ''.join(traceback.format_exception(*sys.exc_info())))
+            raise self.exception
+
+    def trying(self, frame_index, frame_bgr, *args, **kwargs):
+        if self.debug is False:
+            try:
+                frame_bgr = self.masking_function(frame_index, frame_bgr, *args, **kwargs)
+            finally:
+                return frame_bgr
+        else:
+            return self.masking_function(frame_index, frame_bgr, *args, **kwargs)
+
+    def masking(self, *args, **kwargs):
         self.reader.resetPositionByIndex(self.index_beg)
         frame_index = self.index_beg
         for n, bgr in enumerate(self.reader):
@@ -73,9 +106,9 @@ class MaskingVideoWorker:
                 if info.index_frame == frame_index:
                     if person.identity in self.options_dict:
                         masking_option = self.options_dict[person.identity]
-                        bgr = self.masking_function(frame_index, bgr, info.box_face, masking_option)
+                        bgr = self.trying(frame_index, bgr, info.box_face, masking_option)
                     it.update()
-            self.worker_lock.update(1)
+            self.worker_lock.update(self.num_seq, 1)
             self.result_list.append((frame_index, bgr))
             frame_index += 1
             if self.verbose is True:
@@ -115,27 +148,28 @@ class MaskingVideoWorker:
         return function
 
     @staticmethod
-    def createWorkers(num_workers, path_in_video, options_dict, iterator_list, masking_function, schedule_call):
+    def createWorkers(num_workers, path_in_video, options_dict, iterator_list, masking_function, schedule_call, debug):
         num_split_max = multiprocessing.cpu_count()
         assert 0 < num_workers <= num_split_max, 'num split should be (0,{}], but is {}'.format(num_split_max, num_workers)
         worker_lock = WorkerLock(len(XVideoReader(path_in_video)), schedule_call)
         worker_list = []
         for n in range(num_workers):
-            worker = MaskingVideoWorker(n, path_in_video, options_dict, iterator_list[n], masking_function, worker_lock, False)
+            worker = MaskingVideoWorker(n, path_in_video, options_dict, iterator_list[n], masking_function, worker_lock, False, debug)
             worker_list.append(worker)
         return worker_list
 
     @staticmethod
     def doMaskingParallel(worker_list):
-        thread_list = []
-        for worker in worker_list:
-            assert isinstance(worker, MaskingVideoWorker)
-            thread = threading.Thread(target=worker.run)
-            thread_list.append(thread)
-            thread.start()
-        # join threading
-        for thread in thread_list:
-            thread.join()
+        try:
+            for worker in worker_list:
+                assert isinstance(worker, MaskingVideoWorker)
+                worker.start()
+            for worker in worker_list:
+                assert isinstance(worker, MaskingVideoWorker)
+                worker.join()
+            logging.warning('finish masking parallel')
+        except Exception as e:
+            raise e
 
     @staticmethod
     def dumpAll(path_video_out, worker_list, config_or_path_video_in=None):

@@ -122,6 +122,13 @@ class XPortrait(XCache):
             logging.warning('load from: {}, property list: {}'.format(path, property_list))
         return xcache
 
+    def tolist(self):
+        # items: 'detect', 'attribute', 'parsing', 'alpha', 'fine_alpha', 'insightface'
+        data = list()
+        for s, b, p, l, r in zip(self.score, self.box, self.points, self.landmark, self.radian):
+            data.append(dict(score=s.tolist(), box=b.tolist(), points=p.tolist(), landmark=l.tolist(), randian=r.tolist()))
+        return data  # to json: json.dumps(data, indent=4)
+
     """
     base attribute for face(s)
     """
@@ -293,7 +300,7 @@ class XPortrait(XCache):
     @property
     def identity_normed_embedding(self):
         if not hasattr(self, '_identity_normed_embedding'):
-            self.identity_embedding
+            return self._identity_normed_embedding
         return self._identity_normed_embedding
 
     """
