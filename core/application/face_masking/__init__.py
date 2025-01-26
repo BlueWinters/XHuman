@@ -1,7 +1,7 @@
 
 import logging
 
-__version__ = '0.2.5'
+__version__ = '0.2.6'
 logging.error('face_masking version: {}'.format(__version__))
 
 """
@@ -29,5 +29,7 @@ version - 0.2.4
     note: fix bug in multi-thread
 version - 0.2.5
     note: fix bug in water blur
+version - 0.2.6
+    note: add sticker method
 """
 
