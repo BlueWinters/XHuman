@@ -5,7 +5,8 @@ import cv2
 import numpy as np
 import tqdm
 from skimage import segmentation
-from ...geometry import Rectangle
+from .boundingbox import Rectangle, BoundingBox
+from .morphology import getMaxRegion
 from ...base.cache import XPortrait, XPortraitHelper
 from ...thirdparty.cache import XBody
 from ...utils.context import XContextTimer
@@ -104,7 +105,7 @@ class LibMasking_Mosaic:
             if focus_type == 'face':
                 mask[top:bot, lft:rig] = LibMasking_Mosaic.getFaceMaskByPoints(XPortrait(bgr[top:bot, lft:rig, :]))
             if focus_type == 'head':
-                mask[top:bot, lft:rig] = LibMasking_Mosaic.getHeadMask(XPortrait(bgr[top:bot, lft:rig, :]))
+                mask[top:bot, lft:rig] = LibMasking_Mosaic.getHeadMask(bgr, (lft, top, rig, bot))
                 mask[box[3]:, :] = 0
             return LibMasking_Mosaic.workOnSelected(cache.bgr, mosaic_bgr, mask=mask)
         else:
@@ -172,12 +173,31 @@ class LibMasking_Mosaic:
         return XPortraitHelper.getFaceRegion(cache, index=n, top_line=top_line, value=value)[n]
 
     @staticmethod
-    def getHeadMask(cache, value=255):
-        # cache = XBody(bgr, backend='ultralytics.yolo11n-pose')
-        # parsing = cache.portrait_parsing
+    def getHeadMask(bgr, box, value=255):
+        lft, top, rig, bot = box
+        cache = XPortrait(bgr[top:bot, lft:rig, :])
+        if cache.number == 1:
+            parsing = cache.parsing
+            mask = np.where((0 < parsing) & (parsing < 15) & (parsing != 12), value, 0).astype(np.uint8)
+            return getMaxRegion(mask) * value
+        if cache.number > 1:
+            box_src = np.reshape(np.array(box, dtype=np.int32), (1, 4))
+            box_cur = np.reshape(np.array(cache.box, dtype=np.int32), (-1, 4))
+            iou = BoundingBox.computeIOU(boxes1=box_src, boxes2=box_cur)  # 1,N
+            part_copy = np.copy(cache.bgr)
+            selected_index = int(np.argmax(iou[0, :]))
+            for n in range(cache.number):
+                if n != selected_index:
+                    l, t, r, b = cache.box[n, :]
+                    part_copy[t:b, l:r, :] = 255
+            part_copy[top:bot, lft:rig, :] = bgr[top:bot, lft:rig, :]
+            parsing = XPortrait(part_copy).parsing
+            mask = np.where((0 < parsing) & (parsing < 15) & (parsing != 12), value, 0).astype(np.uint8)
+            return getMaxRegion(mask) * value
+        # note: detect face fail
         parsing = cache.parsing
         mask = np.where((0 < parsing) & (parsing < 15) & (parsing != 12), value, 0).astype(np.uint8)
-        return mask
+        return getMaxRegion(mask) * value
 
     @staticmethod
     def getMaskFromBox(h, w, box, ratio, value=255):
@@ -210,7 +230,7 @@ class LibMasking_Mosaic:
             if focus_type == 'face':
                 mask[top:bot, lft:rig] = LibMasking_Mosaic.getFaceMaskByPoints(XPortrait(part))
             if focus_type == 'head':
-                mask[top:bot, lft:rig] = LibMasking_Mosaic.getHeadMask(XPortrait(part))
+                mask[top:bot, lft:rig] = LibMasking_Mosaic.getHeadMask(bgr, (lft, top, rig, bot))
                 mask[box[3]:, :] = 0
             mesh_size = int(size / 256 * 7 / 4)
             mesh_size = int(np.clip(mesh_size, 3, 13))

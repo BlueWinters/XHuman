@@ -24,6 +24,20 @@ class BoundingBox(Rectangle):
         return float(inter_area / union_area) if union_area > 0. else 0.
 
     @staticmethod
+    def computeIOU(boxes1, boxes2):
+        lu = np.maximum(boxes1[:, None, :2], boxes2[:, :2])  # lu with shape N,M,2 ; boxes1[:,None,:2] with shape (N,1,2) boxes2 with shape(M,2)
+        rd = np.minimum(boxes1[:, None, 2:], boxes2[:, 2:])  # rd same to lu
+        intersection_wh = np.maximum(0.0, rd - lu)
+        intersection_area = intersection_wh[:, :, 0] * intersection_wh[:, :, 1]  # with shape (N,M)
+        boxes1_wh = np.maximum(0.0, boxes1[:, 2:] - boxes1[:, :2])
+        boxes1_area = boxes1_wh[:, 0] * boxes1_wh[:, 1]  # with shape (N,)
+        boxes2_wh = np.maximum(0.0, boxes2[:, 2:] - boxes2[:, :2])
+        boxes2_area = boxes2_wh[:, 0] * boxes2_wh[:, 1]  # with shape (M,)
+        union_area = np.maximum(boxes1_area[:, None] + boxes2_area - intersection_area, 1e-8)  # with shape (N,M)
+        ious = np.clip(intersection_area / union_area, 0.0, 1.0)
+        return ious.astype(np.float32)
+
+    @staticmethod
     def distance(a, b) -> float:
         assert isinstance(a, BoundingBox)
         assert isinstance(b, BoundingBox)

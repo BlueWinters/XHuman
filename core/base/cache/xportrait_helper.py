@@ -26,12 +26,26 @@ class XPortraitHelper:
     @staticmethod
     def getAjna(cache):
         assert isinstance(cache, XPortrait), type(cache)
-        return [np.mean(cache.landmark[n][17:27, :], axis=0) for n in range(cache.number)]
+        ajna_list = []
+        for n in range(cache.number):
+            ajna_list.append(np.mean(cache.landmark[n][17:27, :], axis=0))
+        return np.reshape(np.array(ajna_list, dtype=np.float32), (cache.number, 2))  # N,2
 
     @staticmethod
     def getCenterOfEyes(cache):
         assert isinstance(cache, XPortrait), type(cache)
-        return [np.mean(cache.landmark[n][36:48, :], axis=0) for n in range(cache.number)]
+        center_both_eyes_list = []
+        for n in range(cache.number):
+            center_both_eyes_list.append(np.mean(cache.landmark[n][36:48, :], axis=0))
+        return np.reshape(np.array(center_both_eyes_list, dtype=np.float32), (cache.number, 2))  # N,2
+
+    @staticmethod
+    def getCenterOfEachEyes(cache):
+        assert isinstance(cache, XPortrait), type(cache)
+        center_each_eyes_list = []
+        for n in range(cache.number):
+            center_each_eyes_list.append((np.mean(cache.landmark[n][36:40, :], axis=0), np.mean(cache.landmark[n][42:48, :], axis=0)))
+        return np.reshape(np.array(center_each_eyes_list, dtype=np.float32), (cache.number, 2, 2))  # N,2,2
 
     @staticmethod
     def getFaceRegion(cache, index=None, top_line='brow', value=255):

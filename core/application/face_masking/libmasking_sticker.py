@@ -58,6 +58,15 @@ class LibMasking_Sticker:
         return canvas
 
     @staticmethod
+    def getIndexByBox(cache, box):
+        assert isinstance(cache, XPortrait), type(cache)
+        box_src = np.reshape(np.array(box, dtype=np.int32), (1, 4))
+        box_cur = np.reshape(np.array(cache.box, dtype=np.int32), (-1, 4))
+        iou = BoundingBox.computeIOU(boxes1=box_src, boxes2=box_cur)  # 1,N
+        print(iou.shape)
+        return int(np.argmax(iou[0, :]))
+
+    @staticmethod
     def toCache(source):
         assert isinstance(source, (np.ndarray, str, XPortrait))
         if isinstance(source, str):
@@ -114,21 +123,21 @@ class LibMasking_Sticker:
                 top = int(max(0, top - hh * ratio))
                 rig = int(min(w, rig + ww * ratio))
                 bot = int(min(h, bot + hh * ratio))
-                dst_h, dst_w = bot - top, rig - lft
                 part = bgr[top:bot, lft:rig, :]
                 cache = XPortrait(part)
-                points_sticker = sticker['eyes_center']
-                points_source = cache.points[0, :2]
+                points_sticker = np.array(sticker['eyes_center'], dtype=np.float32)
+                n = LibMasking_Sticker.getIndexByBox(cache, box)  # default is 0
+                points_source = cache.points[n, :2]
+                points_source[:, 0] += lft
+                points_source[:, 1] += top
                 matrix = cv2.estimateAffinePartial2D(points_sticker, points_source, method=cv2.LMEDS)[0]
-                param = dict(dsize=(dst_w, dst_h), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT, borderValue=(255, 255, 255))
+                param = dict(dsize=(w, h), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT, borderValue=(255, 255, 255))
                 sticker_warped = cv2.warpAffine(sticker_image, matrix, **param)
                 sticker_warped_bgr, sticker_warped_alpha = sticker_warped[:, :, :3], sticker_warped[:, :, 3:4]
                 mask = sticker_warped_alpha.astype(np.float32) / 255.
-                fusion = part * (1 - mask) + sticker_warped_bgr * mask
+                fusion = bgr * (1 - mask) + sticker_warped_bgr * mask
                 fusion_bgr = np.round(fusion).astype(np.uint8)
-                bgr_copy = np.copy(bgr)
-                bgr_copy[top:bot, lft:rig, :] = fusion_bgr
-                return bgr_copy
+                return fusion_bgr
             if 'eyes_center_fix' in sticker:
                 ratio = 1.5
                 h, w, c = bgr.shape
@@ -139,25 +148,25 @@ class LibMasking_Sticker:
                 top = int(max(0, top - hh * ratio))
                 rig = int(min(w, rig + ww * ratio))
                 bot = int(min(h, bot + hh * ratio))
-                dst_h, dst_w = bot - top, rig - lft
                 part = bgr[top:bot, lft:rig, :]
                 cache = XPortrait(part)
                 points_sticker = np.array(sticker['eyes_center_fix'], dtype=np.float32)
-                pts_lft = cache.points[0, 0:1].astype(np.float32)
-                pts_rig = cache.points[0, 1:2].astype(np.float32)
-                points_source = np.concatenate([pts_lft, pts_rig, ], axis=0).astype(np.float32)
+                n = LibMasking_Sticker.getIndexByBox(cache, box)  # default is 0
+                pts_lft = cache.points[n, 0:1].astype(np.float32)
+                pts_rig = cache.points[n, 1:2].astype(np.float32)
+                points_source = np.concatenate([pts_lft, pts_rig], axis=0).astype(np.float32)
+                points_source[:, 0] += lft
+                points_source[:, 1] += top
                 assert len(points_sticker) == len(points_source), (points_sticker.shape, points_source.shape)
-                param = dict(dsize=(dst_w, dst_h), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT, borderValue=(255, 255, 255))
+                param = dict(dsize=(w, h), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT, borderValue=(255, 255, 255))
                 transform = skimage.transform.SimilarityTransform()
                 transform.estimate(points_sticker, points_source)
                 sticker_warped = cv2.warpAffine(sticker_image, transform.params[:2, :], **param)
                 sticker_warped_bgr, sticker_warped_alpha = sticker_warped[:, :, :3], sticker_warped[:, :, 3:4]
                 mask = sticker_warped_alpha.astype(np.float32) / 255.
-                fusion = part * (1 - mask) + sticker_warped_bgr * mask
+                fusion = bgr * (1 - mask) + sticker_warped_bgr * mask
                 fusion_bgr = np.round(fusion).astype(np.uint8)
-                bgr_copy = np.copy(bgr)
-                bgr_copy[top:bot, lft:rig, :] = fusion_bgr
-                return bgr_copy
+                return fusion_bgr
             if 'align' in sticker:
                 ratio = 0.8
                 h, w, c = bgr.shape
@@ -168,21 +177,22 @@ class LibMasking_Sticker:
                 top = int(max(0, top - hh * ratio))
                 rig = int(min(w, rig + ww * ratio))
                 bot = int(min(h, bot + hh * ratio))
-                dst_h, dst_w = bot - top, rig - lft
+                # dst_h, dst_w = bot - top, rig - lft
                 part = bgr[top:bot, lft:rig, :3]
                 cache = XPortrait(part)
-                points_sticker = XPortrait(sticker_image[:, :, :3]).points[0]
-                points_source = cache.points[0]
+                points_sticker = np.copy(XPortrait(sticker_image[:, :, :3]).points[0])
+                n = LibMasking_Sticker.getIndexByBox(cache, box)  # default is 0
+                points_source = np.copy(cache.points[n])
+                points_source[:, 0] += lft
+                points_source[:, 1] += top
                 matrix = cv2.estimateAffinePartial2D(points_sticker, points_source, method=cv2.LMEDS)[0]
-                param = dict(dsize=(dst_w, dst_h), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT, borderValue=(255, 255, 255))
+                param = dict(dsize=(w, h), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT, borderValue=(255, 255, 255))
                 sticker_warped = cv2.warpAffine(sticker_image, matrix, **param)
                 sticker_warped_bgr, sticker_warped_alpha = sticker_warped[:, :, :3], sticker_warped[:, :, 3:4]
                 mask = sticker_warped_alpha.astype(np.float32) / 255.
-                fusion = part * (1 - mask) + sticker_warped_bgr * mask
+                fusion = bgr * (1 - mask) + sticker_warped_bgr * mask
                 fusion_bgr = np.round(fusion).astype(np.uint8)
-                bgr_copy = np.copy(bgr)
-                bgr_copy[top:bot, lft:rig, :] = fusion_bgr
-                return bgr_copy
+                return fusion_bgr
             if 'box' in sticker:
                 H, W, C = bgr.shape
                 box_src, box_fmt = sticker['box']

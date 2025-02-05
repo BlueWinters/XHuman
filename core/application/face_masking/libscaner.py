@@ -445,7 +445,6 @@ class LibScaner:
             bbox = BoundingBox(np.array([lft, top, rig, bot], dtype=np.int32)).toSquare().clip(0, 0, w, h).asInt()
             if confidence[0] > threshold:
                 return np.array(bbox, dtype=np.int32), 1 + np.mean(1-confidence[5:])
-
             else:
                 return np.array(bbox, dtype=np.int32), 4 + np.mean(1-confidence[5:])
         if confidence[3] > threshold and confidence[1] > threshold:
@@ -454,14 +453,16 @@ class LibScaner:
                 assert confidence[0] > threshold, confidence[0]
                 rig_ratio = float(rig - points[1, 0]) / float(rig - points[0, 0])
                 lft = points[2, 0] - float(rig - points[0, 0]) * (1 - rig_ratio)
-                len_c2rig = rig - points[0, 0]
+                lft, rig = min(lft, rig), max(lft, rig)
+                len_c2rig = abs(rig - points[0, 0])
                 top = int(max(points[0, 1] - 0.4 * len_c2rig, 0))
                 bot = int(min(points[0, 1] + 0.8 * len_c2rig, h))
                 bbox = BoundingBox(np.array([lft, top, rig, bot], dtype=np.int32)).toSquare().clip(0, 0, w, h).asInt()
                 return np.array(bbox, dtype=np.int32), 2 + np.mean(1-confidence[5:])
             if confidence[0] > threshold:
                 lft = points[0, 0] - abs(points[0, 0] - points[1, 0])  # min(lft, points[0, 0])
-                len_c2rig = rig - points[0, 0]
+                lft, rig = min(lft, rig), max(lft, rig)
+                len_c2rig = abs(rig - points[0, 0])
                 top = int(max(points[0, 1] - 0.4 * len_c2rig, 0))
                 bot = int(min(points[0, 1] + 0.8 * len_c2rig, h))
                 bbox = BoundingBox(np.array([lft, top, rig, bot], dtype=np.int32)).toSquare().clip(0, 0, w, h).asInt()
@@ -472,14 +473,16 @@ class LibScaner:
                 assert confidence[0] > threshold, confidence[0]
                 lft_ratio = float(points[2, 0]-lft) / float(points[0, 0]-lft)
                 rig = points[1, 0] + float(points[0, 0] - lft) * (1 - lft_ratio)
-                len_c2lft = points[0, 0] - lft
+                lft, rig = min(lft, rig), max(lft, rig)
+                len_c2lft = abs(points[0, 0] - lft)
                 top = int(max(points[0, 1] - 0.4 * len_c2lft, 0))
                 bot = int(min(points[0, 1] + 0.8 * len_c2lft, h))
                 bbox = BoundingBox(np.array([lft, top, rig, bot], dtype=np.int32)).toSquare().clip(0, 0, w, h).asInt()
                 return np.array(bbox, dtype=np.int32), 2 + np.mean(1-confidence[5:])
             if confidence[0] > threshold:
                 rig = points[0, 0] + abs(points[2, 0] - points[0, 0])  # min(lft, points[0, 0])
-                len_c2lft = points[0, 0] - lft
+                lft, rig = min(lft, rig), max(lft, rig)
+                len_c2lft = abs(points[0, 0] - lft)
                 top = int(max(points[0, 1] - 0.4 * len_c2lft, 0))
                 bot = int(min(points[0, 1] + 0.8 * len_c2lft, h))
                 bbox = BoundingBox(np.array([lft, top, rig, bot], dtype=np.int32)).toSquare().clip(0, 0, w, h).asInt()
