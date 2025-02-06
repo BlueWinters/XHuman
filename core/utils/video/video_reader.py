@@ -116,7 +116,9 @@ class XVideoReader:
         data = list()
         self.resetPositionByIndex(beg)
         for n in range(end-beg):
-            bgr = self.read()[1]
+            ret, bgr = self.read()
+            if ret is False:
+                break
             if n % step == 0:
                 data.append(bgr)
         return data

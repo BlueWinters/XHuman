@@ -185,7 +185,7 @@ class Person:
                 assert len(self.data)
 
             def __str__(self):
-                return '{} - {}, {} == {}'.format(self.index, self.beg, self.end, len(self.data))
+                return '{} - ({}, {}) == {}'.format(self.index, self.beg, self.end, len(self.data))
 
         frame_index_array = np.array([info.index_frame for info in self.frame_info_list], dtype=np.int32)
         idx_beg_arg_where = np.argwhere(idx_beg <= frame_index_array)
