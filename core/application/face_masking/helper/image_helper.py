@@ -66,39 +66,59 @@ class MaskingHelper:
     """
     """
     @staticmethod
-    def getFaceMaskByPoints(cache, box=None, n=0, top_line='brow', value=255) -> np.ndarray:
-        return XPortraitHelper.getFaceRegion(cache, index=n, top_line=top_line, value=value)[n]
+    def getFaceMaskByPoints(cache, box, top_line='brow', value=255) -> np.ndarray:
+        if cache.number == 1:
+            cv2.imwrite(R'N:\archive\2024\1126-video\error\5\m.png', cache.visual_landmarks)
+            return XPortraitHelper.getFaceRegion(cache, top_line=top_line, value=value)[0]
+        if cache.number > 1:
+            box_src = np.reshape(np.array(box, dtype=np.int32), (1, 4))
+            box_cur = np.reshape(np.array(cache.box, dtype=np.int32), (-1, 4))
+            iou = MaskingHelper.computeIOU(boxes1=box_src, boxes2=box_cur)  # 1,N
+            selected_index = int(np.argmax(iou[0, :]))
+            if iou[0, selected_index] > 0:
+                return XPortraitHelper.getFaceRegion(cache, top_line=top_line, value=value)[selected_index]
+        lft, top, rig, bot = box
+        h = bot - top
+        w = rig - lft
+        mask = np.ones(shape=(h, w), dtype=np.uint8) * 255
+        # mask[top:bot, lft:rig] = 255
+        return mask
 
     @staticmethod
     def getHeadMaskByParsing(bgr, box, value=255) -> np.ndarray:
         module = XManager.getModules('ultralytics')['yolo11m-seg']
         result = module(bgr, classes=[0], verbose=False)[0]
-        masks = np.round(result.masks.cpu().numpy().data * 255).astype(np.uint8)  # note: C,H,W and [0,1]
-        boxes = np.reshape(np.round(result.boxes.xyxy.cpu().numpy()).astype(np.int32), (-1, 4,))
-        index = -1
-        for n in range(len(masks)):
-            if Rectangle.isInside(Rectangle(np.array(box)), Rectangle(boxes[n, :])):
-                index = n
-                break
-        if index == -1:
-            box_src = np.reshape(np.array(box, dtype=np.int32), (1, 4))
-            box_cur = np.reshape(np.array(boxes, dtype=np.int32), (-1, 4))
-            iou = MaskingHelper.computeIOU(boxes1=box_src, boxes2=box_cur)  # 1,N
-            index = int(np.argmax(iou[0, :]))
-        bgr_copy = np.copy(bgr)
-        for n in range(len(masks)):
-            if n != index:
-                mask = cv2.resize(masks[n, :, :], bgr.shape[:2][::-1])
-                bgr_copy[mask > 0] = 255
-        mask_cur = cv2.resize(masks[index, :, :], bgr.shape[:2][::-1])
-        bgr_copy[mask_cur > 0] = bgr[mask_cur > 0]
-        # processing with masked-bgr
-        lft, top, rig, bot = box
-        cache = XPortrait(bgr_copy[top:bot, lft:rig, :])
-        parsing = cache.parsing
-        mask = np.where((0 < parsing) & (parsing < 15) & (parsing != 12), value, 0).astype(np.uint8)
-        mask_single = MaskingHelper.getSingleConnectedRegion(mask) * value
-        return mask_single
+        if len(result) > 0 and result.masks is not None:
+            masks = np.round(result.masks.cpu().numpy().data * 255).astype(np.uint8)  # note: C,H,W and [0,1]
+            boxes = np.reshape(np.round(result.boxes.xyxy.cpu().numpy()).astype(np.int32), (-1, 4,))
+            index = -1
+            for n in range(len(masks)):
+                if Rectangle.isInside(Rectangle(np.array(box)), Rectangle(boxes[n, :])):
+                    index = n
+                    break
+            if index == -1:
+                box_src = np.reshape(np.array(box, dtype=np.int32), (1, 4))
+                box_cur = np.reshape(np.array(boxes, dtype=np.int32), (-1, 4))
+                iou = MaskingHelper.computeIOU(boxes1=box_src, boxes2=box_cur)  # 1,N
+                index = int(np.argmax(iou[0, :]))
+            bgr_copy = np.copy(bgr)
+            for n in range(len(masks)):
+                if n != index:
+                    mask = cv2.resize(masks[n, :, :], bgr.shape[:2][::-1])
+                    bgr_copy[mask > 0] = 255
+            mask_cur = cv2.resize(masks[index, :, :], bgr.shape[:2][::-1])
+            bgr_copy[mask_cur > 0] = bgr[mask_cur > 0]
+            # processing with masked-bgr
+            lft, top, rig, bot = box
+            cache = XPortrait(bgr_copy[top:bot, lft:rig, :])
+            parsing = cache.parsing
+            mask = np.where((0 < parsing) & (parsing < 15) & (parsing != 12), value, 0).astype(np.uint8)
+            mask_single = MaskingHelper.getSingleConnectedRegion(mask) * value
+            return mask_single
+        else:
+            lft, top, rig, bot = box
+            cache = XPortrait(bgr[top:bot, lft:rig, :])
+            return MaskingHelper.getFaceMaskByPoints(cache, box)
 
     @staticmethod
     def getHeadMaskByParsing2(bgr, box, value=255) -> np.ndarray:
