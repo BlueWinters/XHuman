@@ -97,7 +97,7 @@ class MaskingVideoWorker(threading.Thread):
         for n, bgr in enumerate(self.image_list):
             if not bool(self.index_beg <= frame_index <= self.index_end):
                 break  # finish, just break
-            if isinstance(bgr, np.ndarray):
+            if isinstance(bgr, np.ndarray) is False:
                 break  # bug for video
             # masking process
             counter += 1
