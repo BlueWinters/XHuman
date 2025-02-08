@@ -9,7 +9,6 @@ import skimage
 from ...base import XCache
 
 
-
 class XBody(XCache):
     """
     """

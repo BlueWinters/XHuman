@@ -24,6 +24,7 @@ class LibUltralyticsWrapper:
     ModelList = [
         'yolo11n',  # 'yolo11s', 'yolo11m', 'yolo11l', 'yolo11x',
         'yolo11n-pose', 'yolo11m-pose',  # 'yolo11s-pose', 'yolo11m-pose', 'yolo11l-pose', 'yolo11x-pose',
+        'yolo11m-seg',
     ]
 
     def __init__(self, *args, **kwargs):

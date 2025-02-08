@@ -8,6 +8,7 @@ import numpy as np
 import dataclasses
 import tqdm
 import json
+import skimage
 from .boundingbox import BoundingBox
 from ...base.cache import XPortrait, XPortraitHelper
 from ...thirdparty.cache import XBody, XBodyHelper
@@ -429,6 +430,24 @@ class LibScaner:
         return -1
 
     @staticmethod
+    def realignFace(points, w, h, index):
+        template = np.array([[192, 239], [318, 240], [256, 314]], dtype=np.float32)
+        dst_pts = points[np.array(index, dtype=np.int32)]
+        src_pts = template[:len(dst_pts), :]
+        transform = skimage.transform.SimilarityTransform()
+        transform.estimate(src_pts, dst_pts)
+        box = np.array([[0, 0, 1], [512, 0, 1], [512, 512, 1], [0, 512, 1]], dtype=np.float32)
+        box_remap = np.dot(transform.params, box.T)[:2, :].T
+        box_remap_int = box_remap.astype(np.int32)
+        lft = np.min(box_remap_int[:, 0])
+        rig = np.max(box_remap_int[:, 0])
+        top = np.min(box_remap_int[:, 1])
+        bot = np.max(box_remap_int[:, 1])
+        # bbox = lft, top, rig, bot
+        bbox = BoundingBox(np.array([lft, top, rig, bot], dtype=np.int32)).toSquare().clip(0, 0, w-1, h-1).asInt()
+        return bbox
+
+    @staticmethod
     def transformPoints2FaceBox(bgr, key_points, box, threshold=0.5):
         h, w, c = bgr.shape
         confidence = key_points[:, 2].astype(np.float32)
@@ -442,50 +461,67 @@ class LibScaner:
             ctr_ear = (lft_ear + rig_ear) / 2
             top = int(max(ctr_ear[1] - 0.4 * len_ear, 0))
             bot = int(min(ctr_ear[1] + 0.6 * len_ear, h))
-            bbox = BoundingBox(np.array([lft, top, rig, bot], dtype=np.int32)).toSquare().clip(0, 0, w, h).asInt()
-            if confidence[0] > threshold:
-                return np.array(bbox, dtype=np.int32), 1 + np.mean(1-confidence[5:])
+            if points[4, 0] < points[2, 0] < points[0, 0] < points[1, 0] < points[3, 0]:
+                bbox = BoundingBox(np.array([lft, top, rig, bot], dtype=np.int32)).toSquare().clip(0, 0, w-1, h-1).asInt()
+                if confidence[0] > threshold:
+                    return np.array(bbox, dtype=np.int32), 1 + np.mean(1-confidence[5:])
+                else:
+                    return np.array(bbox, dtype=np.int32), 4 + np.mean(1-confidence[5:])
             else:
-                return np.array(bbox, dtype=np.int32), 4 + np.mean(1-confidence[5:])
+                if confidence[1] > threshold and confidence[2] > threshold:
+                    bbox = LibScaner.realignFace(points, w, h, index=[2, 1, 0])
+                    return np.array(bbox, dtype=np.int32), 4 + np.mean(1 - confidence[5:])
         if confidence[3] > threshold and confidence[1] > threshold:
             rig = points[3, 0]  # points[1, 0] < points[3, 0]
             if confidence[2] > threshold:
                 assert confidence[0] > threshold, confidence[0]
-                rig_ratio = float(rig - points[1, 0]) / float(rig - points[0, 0])
-                lft = points[2, 0] - float(rig - points[0, 0]) * (1 - rig_ratio)
-                lft, rig = min(lft, rig), max(lft, rig)
-                len_c2rig = abs(rig - points[0, 0])
-                top = int(max(points[0, 1] - 0.4 * len_c2rig, 0))
-                bot = int(min(points[0, 1] + 0.8 * len_c2rig, h))
-                bbox = BoundingBox(np.array([lft, top, rig, bot], dtype=np.int32)).toSquare().clip(0, 0, w, h).asInt()
+                if points[2, 0] < points[0, 0] < points[1, 0] < points[3, 0]:
+                    rig_ratio = float(rig - points[1, 0]) / float(rig - points[0, 0])
+                    lft = points[2, 0] - float(rig - points[0, 0]) * (1 - rig_ratio)
+                    lft, rig = min(lft, rig), max(lft, rig)
+                    len_c2rig = abs(rig - points[0, 0])
+                    top = int(max(points[0, 1] - 0.4 * len_c2rig, 0))
+                    bot = int(min(points[0, 1] + 0.8 * len_c2rig, h))
+                    bbox = BoundingBox(np.array([lft, top, rig, bot], dtype=np.int32)).toSquare().clip(0, 0, w-1, h-1).asInt()
+                else:
+                    bbox = LibScaner.realignFace(points, w, h, index=[2, 1, 0])
                 return np.array(bbox, dtype=np.int32), 2 + np.mean(1-confidence[5:])
             if confidence[0] > threshold:
-                lft = points[0, 0] - abs(points[0, 0] - points[1, 0])  # min(lft, points[0, 0])
-                lft, rig = min(lft, rig), max(lft, rig)
-                len_c2rig = abs(rig - points[0, 0])
-                top = int(max(points[0, 1] - 0.4 * len_c2rig, 0))
-                bot = int(min(points[0, 1] + 0.8 * len_c2rig, h))
-                bbox = BoundingBox(np.array([lft, top, rig, bot], dtype=np.int32)).toSquare().clip(0, 0, w, h).asInt()
+                if points[0, 0] < points[1, 0] < points[3, 0]:
+                    lft = points[0, 0] - abs(points[0, 0] - points[1, 0])  # min(lft, points[0, 0])
+                    lft, rig = min(lft, rig), max(lft, rig)
+                    len_c2rig = abs(rig - points[0, 0])
+                    top = int(max(points[0, 1] - 0.4 * len_c2rig, 0))
+                    bot = int(min(points[0, 1] + 0.8 * len_c2rig, h))
+                    bbox = BoundingBox(np.array([lft, top, rig, bot], dtype=np.int32)).toSquare().clip(0, 0, w-1, h-1).asInt()
+                else:
+                    bbox = LibScaner.realignFace(points, w, h, index=[1, 0])
                 return np.array(bbox, dtype=np.int32), 3 + np.mean(1-confidence[5:])
         if confidence[4] > threshold and confidence[2] > threshold:
             lft = points[4, 0]
             if confidence[1] > threshold:
                 assert confidence[0] > threshold, confidence[0]
-                lft_ratio = float(points[2, 0]-lft) / float(points[0, 0]-lft)
-                rig = points[1, 0] + float(points[0, 0] - lft) * (1 - lft_ratio)
-                lft, rig = min(lft, rig), max(lft, rig)
-                len_c2lft = abs(points[0, 0] - lft)
-                top = int(max(points[0, 1] - 0.4 * len_c2lft, 0))
-                bot = int(min(points[0, 1] + 0.8 * len_c2lft, h))
-                bbox = BoundingBox(np.array([lft, top, rig, bot], dtype=np.int32)).toSquare().clip(0, 0, w, h).asInt()
+                if points[4, 0] < points[2, 0] < points[0, 0] < points[1, 0]:
+                    lft_ratio = float(points[2, 0]-lft) / float(points[0, 0]-lft)
+                    rig = points[1, 0] + float(points[0, 0] - lft) * (1 - lft_ratio)
+                    lft, rig = min(lft, rig), max(lft, rig)
+                    len_c2lft = abs(points[0, 0] - lft)
+                    top = int(max(points[0, 1] - 0.4 * len_c2lft, 0))
+                    bot = int(min(points[0, 1] + 0.8 * len_c2lft, h))
+                    bbox = BoundingBox(np.array([lft, top, rig, bot], dtype=np.int32)).toSquare().clip(0, 0, w-1, h-1).asInt()
+                else:
+                    bbox = LibScaner.realignFace(points, w, h, index=[2, 1, 0])
                 return np.array(bbox, dtype=np.int32), 2 + np.mean(1-confidence[5:])
             if confidence[0] > threshold:
-                rig = points[0, 0] + abs(points[2, 0] - points[0, 0])  # min(lft, points[0, 0])
-                lft, rig = min(lft, rig), max(lft, rig)
-                len_c2lft = abs(points[0, 0] - lft)
-                top = int(max(points[0, 1] - 0.4 * len_c2lft, 0))
-                bot = int(min(points[0, 1] + 0.8 * len_c2lft, h))
-                bbox = BoundingBox(np.array([lft, top, rig, bot], dtype=np.int32)).toSquare().clip(0, 0, w, h).asInt()
+                if points[4, 0] < points[2, 0] < points[0, 0]:
+                    rig = points[0, 0] + abs(points[2, 0] - points[0, 0])  # min(lft, points[0, 0])
+                    lft, rig = min(lft, rig), max(lft, rig)
+                    len_c2lft = abs(points[0, 0] - lft)
+                    top = int(max(points[0, 1] - 0.4 * len_c2lft, 0))
+                    bot = int(min(points[0, 1] + 0.8 * len_c2lft, h))
+                    bbox = BoundingBox(np.array([lft, top, rig, bot], dtype=np.int32)).toSquare().clip(0, 0, w-1, h-1).asInt()
+                else:
+                    bbox = LibScaner.realignFace(points, w, h, index=[2, 0])
                 return np.array(bbox, dtype=np.int32), 3 + np.mean(1-confidence[5:])
         return np.array([0, 0, 0, 0], dtype=np.int32), 4 + np.mean(1-confidence[5:])
 

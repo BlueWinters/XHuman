@@ -6,7 +6,7 @@ import numpy as np
 import tqdm
 from skimage import segmentation
 from .boundingbox import Rectangle, BoundingBox
-from .morphology import getMaxRegion
+from .helper.image_helper import MaskingHelper
 from ...base.cache import XPortrait, XPortraitHelper
 from ...thirdparty.cache import XBody
 from ...utils.context import XContextTimer
@@ -94,7 +94,7 @@ class LibMasking_Mosaic:
             cache = XPortrait(bgr)
             h, w = cache.shape
             # lft, top, rig, bot = box
-            lft, top, rig, bot = Rectangle(box).toSquare().expand(0.5, 0.5).clip(0, 0, w, h).asInt()
+            lft, top, rig, bot = Rectangle(box).toSquare().expand(0.8, 0.8).clip(0, 0, w, h).asInt()
             hh = bot - top
             ww = rig - lft
             nh = int(float(h / hh) * num_pixels)
@@ -115,12 +115,14 @@ class LibMasking_Mosaic:
     """
     @staticmethod
     def doSuperPixel(bgr, **kwargs):
+        kernel = 11
+        bgr = cv2.GaussianBlur(bgr, (kernel, kernel), sigmaX=kernel // 2, sigmaY=kernel // 2)
         n_div = kwargs.pop('n_div', 32)
         mesh_size = kwargs.pop('mesh_size', 32)
         n_div = n_div if n_div > 0 else int((bgr.shape[0] * bgr.shape[1]) / (mesh_size * mesh_size))
         h, w, c = bgr.shape
         n_segments = n_div * int(n_div * max(h, w) / min(h, w))
-        compactness = kwargs.pop('compactness', 40)
+        compactness = kwargs.pop('compactness', 10)
         mask = kwargs['mask'] if 'mask' in kwargs else None
         segments = segmentation.slic(bgr, n_segments=n_segments, slic_zero=True, compactness=compactness, start_label=1, mask=mask)
         # segments = cv2.resize(segments, (w // 2, h // 2), interpolation=cv2.INTER_NEAREST)
@@ -146,8 +148,14 @@ class LibMasking_Mosaic:
         bgr_copy = np.copy(bgr)
         bgr_copy = LibMasking_Mosaic.visualAsMean(seg, bgr_copy, 0)
         if vis_boundary is True:
-            bgr_copy = segmentation.mark_boundaries(bgr_copy, seg, color=(1, 1, 1), mode='outer')
-            bgr_copy = np.round(bgr_copy * 255).astype(np.uint8)
+            # bgr_copy = segmentation.mark_boundaries(bgr_copy, seg, color=(1, 1, 1), mode='outer')
+            # bgr_copy = np.round(bgr_copy * 255).astype(np.uint8)
+            # TODO: debug
+            boundary = segmentation.find_boundaries(seg, mode='thick').astype(np.uint8) * 255
+            boundary = cv2.resize(boundary, bgr.shape[:2][::-1], interpolation=cv2.INTER_NEAREST)
+            multi = boundary.astype(np.float32)[:, :, None] / 255.
+            fusion = bgr_copy.astype(np.float32) * (1-multi) + np.ones_like(bgr_copy) * 255 * multi
+            bgr_copy = np.round(fusion).astype(np.uint8)
         return bgr_copy
 
     @staticmethod
@@ -174,30 +182,7 @@ class LibMasking_Mosaic:
 
     @staticmethod
     def getHeadMask(bgr, box, value=255):
-        lft, top, rig, bot = box
-        cache = XPortrait(bgr[top:bot, lft:rig, :])
-        if cache.number == 1:
-            parsing = cache.parsing
-            mask = np.where((0 < parsing) & (parsing < 15) & (parsing != 12), value, 0).astype(np.uint8)
-            return getMaxRegion(mask) * value
-        if cache.number > 1:
-            box_src = np.reshape(np.array(box, dtype=np.int32), (1, 4))
-            box_cur = np.reshape(np.array(cache.box, dtype=np.int32), (-1, 4))
-            iou = BoundingBox.computeIOU(boxes1=box_src, boxes2=box_cur)  # 1,N
-            part_copy = np.copy(cache.bgr)
-            selected_index = int(np.argmax(iou[0, :]))
-            for n in range(cache.number):
-                if n != selected_index:
-                    l, t, r, b = cache.box[n, :]
-                    part_copy[t:b, l:r, :] = 255
-            part_copy[top:bot, lft:rig, :] = bgr[top:bot, lft:rig, :]
-            parsing = XPortrait(part_copy).parsing
-            mask = np.where((0 < parsing) & (parsing < 15) & (parsing != 12), value, 0).astype(np.uint8)
-            return getMaxRegion(mask) * value
-        # note: detect face fail
-        parsing = cache.parsing
-        mask = np.where((0 < parsing) & (parsing < 15) & (parsing != 12), value, 0).astype(np.uint8)
-        return getMaxRegion(mask) * value
+        return MaskingHelper.getHeadMaskByParsing(bgr, box, value)
 
     @staticmethod
     def getMaskFromBox(h, w, box, ratio, value=255):
@@ -217,7 +202,7 @@ class LibMasking_Mosaic:
     def inferenceBoxWithMosaicPolygon(bgr, box, n_div, vis_boundary, focus_type, super_pixels=None):
         if focus_type == 'head' or focus_type == 'face':
             h, w, c = bgr.shape
-            lft, top, rig, bot = Rectangle(box).toSquare().expand(0.5, 0.5).clip(0, 0, w, h).asInt()
+            lft, top, rig, bot = Rectangle(box).toSquare().expand(0.8, 0.8).clip(0, 0, w, h).asInt()
             part = bgr[top:bot, lft:rig]
             size = float(sum(part.shape[:2])) / 2  # (h+w)/2
             # n_div = int(size / 256 * n_div)

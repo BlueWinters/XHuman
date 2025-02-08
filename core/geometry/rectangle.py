@@ -20,6 +20,17 @@ class Rectangle:
         assert inside.y_min >= outside.y_min, (inside.y_min, outside.y_min)
         assert inside.y_max <= outside.y_max, (inside.y_max, outside.y_max)
 
+    @staticmethod
+    def isInside(inside, outside, include_equal=False):
+        assert isinstance(inside, Rectangle)
+        assert isinstance(outside, Rectangle)
+        if include_equal:
+            return (outside.x_min <= inside.x_min < inside.x_max <= outside.x_max) and \
+                (outside.y_min <= inside.y_min < inside.y_max <= outside.y_max)
+        else:
+            return (outside.x_min < inside.x_min < inside.x_max < outside.x_max) and \
+                (outside.y_min < inside.y_min < inside.y_max < outside.y_max)
+
     """
     """
     def __init__(self, points):
@@ -97,8 +108,8 @@ class Rectangle:
         w = self.width
         h = self.height
         self.x_min = self.x_min - w * ratio_lft
-        self.x_max = self.x_max + w * ratio_top
-        self.y_min = self.y_min - h * ratio_rig
+        self.x_max = self.x_max + w * ratio_rig
+        self.y_min = self.y_min - h * ratio_top
         self.y_max = self.y_max + h * ratio_bot
         return self
 

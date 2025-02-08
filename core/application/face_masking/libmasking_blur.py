@@ -10,7 +10,7 @@ import typing
 import tqdm
 # import numba
 from .boundingbox import Rectangle, BoundingBox
-from .morphology import getMaxRegion
+from .helper.image_helper import MaskingHelper
 from ...base import XPortrait, XPortraitHelper
 from ...utils.context import XContextTimer
 from ...utils.video import XVideoReader, XVideoWriter
@@ -202,31 +202,7 @@ class LibMasking_Blur:
 
     @staticmethod
     def getHeadMask(bgr, box, value=255):
-        lft, top, rig, bot = box
-        cache = XPortrait(bgr[top:bot, lft:rig, :])
-        if cache.number == 1:
-            parsing = cache.parsing
-            mask = np.where((0 < parsing) & (parsing < 15) & (parsing != 12), value, 0).astype(np.uint8)
-            return getMaxRegion(mask) * value
-        if cache.number > 1:
-            box_src = np.reshape(np.array(box, dtype=np.int32), (1, 4))
-            box_cur = np.reshape(np.array(cache.box, dtype=np.int32), (-1, 4))
-            iou = BoundingBox.computeIOU(boxes1=box_src, boxes2=box_cur)  # 1,N
-            part_copy = np.copy(cache.bgr)
-            selected_index = int(np.argmax(iou[0, :]))
-            for n in range(cache.number):
-                if n != selected_index:
-                    l, t, r, b = cache.box[n, :]
-                    part_copy[t:b, l:r, :] = 255
-            l, t, r, b = cache.box[selected_index, :]
-            part_copy[t:b, l:r, :] = cache.bgr[t:b, l:r, :]
-            parsing = XPortrait(part_copy).parsing
-            mask = np.where((0 < parsing) & (parsing < 15) & (parsing != 12), value, 0).astype(np.uint8)
-            return getMaxRegion(mask) * value
-        # note: detect face fail
-        parsing = cache.parsing
-        mask = np.where((0 < parsing) & (parsing < 15) & (parsing != 12), value, 0).astype(np.uint8)
-        return getMaxRegion(mask) * value
+        return MaskingHelper.getHeadMaskByParsing(bgr, box, value)
 
     @staticmethod
     def workOnSelected(source_bgr, blured_bgr, kernel=17, mask=None, **kwargs):
