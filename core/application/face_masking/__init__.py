@@ -1,7 +1,7 @@
 
 import logging
 
-__version__ = '0.2.9'
+__version__ = '0.2.10'
 logging.error('face_masking version: {}'.format(__version__))
 
 """
@@ -40,5 +40,7 @@ version - 0.2.9
         1.fix bug for scanner
         2.optimize mosaic result
         3.optimize multi-faces masking with instance segmentation
+version - 0.2.10
+    note: optimize image helper
 """
 
