@@ -90,26 +90,18 @@ class MaskingHelper:
         result = module(bgr, classes=[0], verbose=False)[0]
         if len(result) > 0 and result.masks is not None:
             masks = np.round(result.masks.cpu().numpy().data * 255).astype(np.uint8)  # note: C,H,W and [0,1]
-            boxes = np.reshape(np.round(result.boxes.xyxy.cpu().numpy()).astype(np.int32), (-1, 4,))
-            index = -1
-            for n in range(len(masks)):
-                if Rectangle.isInside(Rectangle(np.array(box)), Rectangle(boxes[n, :])):
-                    index = n
-                    break
-            if index == -1:
-                box_src = np.reshape(np.array(box, dtype=np.int32), (1, 4))
-                box_cur = np.reshape(np.array(boxes, dtype=np.int32), (-1, 4))
-                iou = MaskingHelper.computeIOU(boxes1=box_src, boxes2=box_cur)  # 1,N
-                index = int(np.argmax(iou[0, :]))
-            bgr_copy = np.copy(bgr)
-            for n in range(len(masks)):
-                if n != index:
-                    mask = cv2.resize(masks[n, :, :], bgr.shape[:2][::-1])
-                    bgr_copy[mask > 0] = 255
+            mask_resized = [cv2.resize(masks[n, :, :], bgr.shape[:2][::-1]) for n in range(len(masks))]
+            mask_box = np.zeros(shape=mask_resized[0].shape, dtype=np.uint8)
+            lft, top, rig, bot = box
+            mask_box[top:bot, lft:rig] = 255
+            count_nonzero = []
+            for n in range(len(mask_resized)):
+                count_nonzero.append(np.count_nonzero(((mask_resized[n] > 0) & (mask_box > 0)).astype(np.uint8)))
+            index = int(np.argmax(np.array(count_nonzero, dtype=np.int32)))
             mask_cur = cv2.resize(masks[index, :, :], bgr.shape[:2][::-1])
+            bgr_copy = np.copy(bgr)
             bgr_copy[mask_cur > 0] = bgr[mask_cur > 0]
             # processing with masked-bgr
-            lft, top, rig, bot = box
             cache = XPortrait(bgr_copy[top:bot, lft:rig, :])
             parsing = cache.parsing
             mask = np.where((0 < parsing) & (parsing < 15) & (parsing != 12), value, 0).astype(np.uint8)
