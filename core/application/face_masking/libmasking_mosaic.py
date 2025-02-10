@@ -105,7 +105,7 @@ class LibMasking_Mosaic:
             if focus_type == 'face':
                 mask[top:bot, lft:rig] = LibMasking_Mosaic.getFaceMaskByPoints(XPortrait(bgr[top:bot, lft:rig, :]))
             if focus_type == 'head':
-                mask[top:bot, lft:rig] = LibMasking_Mosaic.getHeadMask(bgr, (lft, top, rig, bot))
+                mask[top:bot, lft:rig] = LibMasking_Mosaic.getHeadMask(bgr, box_src=box, box_tar=(lft, top, rig, bot))
                 mask[box[3]:, :] = 0
             return LibMasking_Mosaic.workOnSelected(cache.bgr, mosaic_bgr, mask=mask)
         else:
@@ -122,7 +122,7 @@ class LibMasking_Mosaic:
         n_div = n_div if n_div > 0 else int((bgr.shape[0] * bgr.shape[1]) / (mesh_size * mesh_size))
         h, w, c = bgr.shape
         n_segments = n_div * int(n_div * max(h, w) / min(h, w))
-        compactness = kwargs.pop('compactness', 10)
+        compactness = kwargs.pop('compactness', 1)
         mask = kwargs['mask'] if 'mask' in kwargs else None
         segments = segmentation.slic(bgr, n_segments=n_segments, slic_zero=True, compactness=compactness, start_label=1, mask=mask)
         # segments = cv2.resize(segments, (w // 2, h // 2), interpolation=cv2.INTER_NEAREST)
@@ -151,7 +151,7 @@ class LibMasking_Mosaic:
             # bgr_copy = segmentation.mark_boundaries(bgr_copy, seg, color=(1, 1, 1), mode='outer')
             # bgr_copy = np.round(bgr_copy * 255).astype(np.uint8)
             # TODO: debug
-            boundary = segmentation.find_boundaries(seg, mode='thick').astype(np.uint8) * 255
+            boundary = segmentation.find_boundaries(seg, mode='thick').astype(np.uint8) * 128
             boundary = cv2.resize(boundary, bgr.shape[:2][::-1], interpolation=cv2.INTER_NEAREST)
             multi = boundary.astype(np.float32)[:, :, None] / 255.
             fusion = bgr_copy.astype(np.float32) * (1-multi) + np.ones_like(bgr_copy) * 255 * multi
@@ -181,8 +181,8 @@ class LibMasking_Mosaic:
         return XPortraitHelper.getFaceRegion(cache, index=n, top_line=top_line, value=value)[n]
 
     @staticmethod
-    def getHeadMask(bgr, box, value=255):
-        return MaskingHelper.getHeadMaskByParsing(bgr, box, value)
+    def getHeadMask(bgr, box_src, box_tar, value=255):
+        return MaskingHelper.getHeadMaskByParsing(bgr, box_src, box_tar, value)
 
     @staticmethod
     def getMaskFromBox(h, w, box, ratio, value=255):
@@ -206,7 +206,7 @@ class LibMasking_Mosaic:
             part = bgr[top:bot, lft:rig]
             size = float(sum(part.shape[:2])) / 2  # (h+w)/2
             # n_div = int(size / 256 * n_div)
-            part_resized = cv2.resize(part, (256, 256))
+            part_resized = cv2.resize(part, (384, 384))
             mosaic_bgr, super_pixels = LibMasking_Mosaic.doWithMosaicPolygon(
                 part_resized, vis_boundary, n_div=n_div, super_pixels=super_pixels)
             bgr_copy = np.copy(bgr)
@@ -215,7 +215,7 @@ class LibMasking_Mosaic:
             if focus_type == 'face':
                 mask[top:bot, lft:rig] = LibMasking_Mosaic.getFaceMaskByPoints(XPortrait(part))
             if focus_type == 'head':
-                mask[top:bot, lft:rig] = LibMasking_Mosaic.getHeadMask(bgr, (lft, top, rig, bot))
+                mask[top:bot, lft:rig] = LibMasking_Mosaic.getHeadMask(bgr, box_src=box, box_tar=(lft, top, rig, bot))
                 mask[box[3]:, :] = 0
             mesh_size = int(size / 256 * 7 / 4)
             mesh_size = int(np.clip(mesh_size, 3, 13))
@@ -252,7 +252,7 @@ class LibMasking_Mosaic:
         if mosaic_type == 'mosaic_pixel_polygon_small':
             # n_div = parameters['n_div'] if 'n_div' in parameters else 8
             mosaic_bgr, super_pixels = LibMasking_Mosaic.inferenceBoxWithMosaicPolygon(
-                bgr, box, 16, vis_boundary=False, focus_type=focus_type, super_pixels=super_pixels)
+                bgr, box, 24, vis_boundary=False, focus_type=focus_type, super_pixels=super_pixels)
             parameters['super_pixels'] = super_pixels
             return mosaic_bgr
         if mosaic_type == 'mosaic_pixel_polygon_small_line':
@@ -264,13 +264,13 @@ class LibMasking_Mosaic:
         if mosaic_type == 'mosaic_pixel_polygon_big':
             # n_div = parameters['n_div'] if 'n_div' in parameters else 16
             mosaic_bgr, super_pixels = LibMasking_Mosaic.inferenceBoxWithMosaicPolygon(
-                bgr, box, 32, vis_boundary=False, focus_type=focus_type, super_pixels=super_pixels)
+                bgr, box, 24, vis_boundary=False, focus_type=focus_type, super_pixels=super_pixels)
             parameters['super_pixels'] = super_pixels
             return mosaic_bgr
         if mosaic_type == 'mosaic_pixel_polygon_big_line':
             # n_div = parameters['n_div'] if 'n_div' in parameters else 16
             mosaic_bgr, super_pixels = LibMasking_Mosaic.inferenceBoxWithMosaicPolygon(
-                bgr, box, 32, vis_boundary=True, focus_type=focus_type, super_pixels=super_pixels)
+                bgr, box, 24, vis_boundary=True, focus_type=focus_type, super_pixels=super_pixels)
             parameters['super_pixels'] = super_pixels
             return mosaic_bgr
         raise NotImplementedError(parameters)

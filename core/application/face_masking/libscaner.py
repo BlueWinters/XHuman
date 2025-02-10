@@ -190,11 +190,13 @@ class Person:
 
         frame_index_array = np.array([info.index_frame for info in self.frame_info_list], dtype=np.int32)
         idx_beg_arg_where = np.argwhere(idx_beg <= frame_index_array)
-        beg_pre_idx = int(idx_beg_arg_where[0] if len(idx_beg_arg_where) > 0 else frame_index_array[0])
         idx_end_arg_where = np.argwhere(frame_index_array <= idx_end)
-        end_aft_idx = int(idx_end_arg_where[-1] if len(idx_end_arg_where) > 0 else frame_index_array[-1])
-        # assert beg_pre_idx != end_aft_idx, (beg_pre_idx, end_aft_idx)
-        return AsynchronousCursor(self.frame_info_list, beg_pre_idx, end_aft_idx)
+        if len(idx_beg_arg_where) > 0 and len(idx_end_arg_where) > 0:
+            beg_pre_idx = int(idx_beg_arg_where[0])
+            end_aft_idx = int(idx_end_arg_where[-1])
+            return AsynchronousCursor(self.frame_info_list, beg_pre_idx, end_aft_idx)
+        else:
+            return AsynchronousCursor(self.frame_info_list, 0, 0)
 
 
 class VideoInfo:
@@ -542,11 +544,13 @@ class LibScaner:
         XManager.getModules('ultralytics').resetTracker('yolo11m-pose')
 
     @staticmethod
-    def updateWithYOLO(index_frame, cache, video_info: VideoInfo):
-        module = XManager.getModules('ultralytics')['yolo11m-pose']
+    def updateWithYOLO(index_frame, frame_bgr, cache_or_result, video_info: VideoInfo):
+        if isinstance(cache_or_result, LibScaner.CacheType):
+            module = XManager.getModules('ultralytics')['yolo11m-pose']
+            result = module.track(frame_bgr, persist=True, conf=0.25, iou=0.7, classes=[0], tracker='bytetrack.yaml', verbose=False)[0]
+        else:
+            result = cache_or_result
         person_list_new = []
-        # cfg_track = '{}/tracker.yaml'.format(os.path.split(__file__)[0])  # 'bytetrack.yaml'
-        result = module.track(cache.bgr, persist=True, conf=0.25, iou=0.7, classes=[0], tracker='bytetrack.yaml', verbose=False)[0]
         number = len(result)
         # num_max = min(number, video_info.person_fixed_num) if video_info.isFixedNumber else number
         if number > 0 and result.boxes.id is not None:
@@ -559,7 +563,7 @@ class LibScaner:
             index_list = np.argsort(score)[::-1].tolist()
             for i, n in enumerate(index_list):
                 cur_one_box_tracker = box[n, :]  # 4: lft,top,rig,bot
-                cur_one_box_face, box_face_score = LibScaner.transformPoints2FaceBox(cache.bgr, points[n, :, :], cur_one_box_tracker)
+                cur_one_box_face, box_face_score = LibScaner.transformPoints2FaceBox(frame_bgr, points[n, :, :], cur_one_box_tracker)
                 box_face_score = box_face_score if LibScaner.hasOverlap(box, n) is False and number == video_info.person_fixed_num else 4
                 index = LibScaner.matchPrevious(video_info.person_list_current, int(identity[n]))
                 if cls[n] != 0:
@@ -568,31 +572,31 @@ class LibScaner:
                 if index != -1:
                     person_cur = video_info.person_list_current.pop(index)
                     assert isinstance(person_cur, Person)
-                    person_cur.appendInfo(index_frame, cache.bgr, cur_one_box_tracker, cur_one_box_face, box_face_score)
+                    person_cur.appendInfo(index_frame, frame_bgr, cur_one_box_tracker, cur_one_box_face, box_face_score)
                     person_list_new.append(person_cur)
                     index_list.remove(n)
                     continue
             # update from history
             for i, n in enumerate(index_list):
                 cur_one_box_tracker = box[n, :]  # 4: lft,top,rig,bot
-                cur_one_box_face, box_face_score = LibScaner.transformPoints2FaceBox(cache.bgr, points[n, :, :], cur_one_box_tracker)
+                cur_one_box_face, box_face_score = LibScaner.transformPoints2FaceBox(frame_bgr, points[n, :, :], cur_one_box_tracker)
                 box_face_score = box_face_score if LibScaner.hasOverlap(box, n) is False and number == video_info.person_fixed_num else 4
                 iou_max_idx, iou_max_val, dis_min_idx, dis_min_val = LibScaner.findBestMatch(video_info.person_list_current, cur_one_box_tracker)
                 if iou_max_idx != -1 and (iou_max_val > LibScaner.IOU_Threshold or video_info.isFixedNumber):
                     person_cur = video_info.person_list_current.pop(iou_max_idx)
                     assert isinstance(person_cur, Person)
-                    person_cur.appendInfo(index_frame, cache.bgr, cur_one_box_tracker, cur_one_box_face, box_face_score)
+                    person_cur.appendInfo(index_frame, frame_bgr, cur_one_box_tracker, cur_one_box_face, box_face_score)
                     person_list_new.append(person_cur)
                 else:
                     if np.sum(cur_one_box_face) > 0:
                         # create a new person
-                        person_new = video_info.createNewPerson(index_frame, cache.bgr, cur_one_box_tracker, cur_one_box_face, box_face_score)
+                        person_new = video_info.createNewPerson(index_frame, frame_bgr, cur_one_box_tracker, cur_one_box_face, box_face_score)
                         if person_new is None:
                             if len(video_info.person_list_current) == 0:
                                 continue
                             person_cur = video_info.person_list_current.pop(dis_min_idx)
                             assert isinstance(person_cur, Person)
-                            person_cur.appendInfo(index_frame, cache.bgr, cur_one_box_tracker, cur_one_box_face, box_face_score)
+                            person_cur.appendInfo(index_frame, frame_bgr, cur_one_box_tracker, cur_one_box_face, box_face_score)
                             person_list_new.append(person_cur)
                         else:
                             person_list_new.append(person_new)
@@ -617,7 +621,7 @@ class LibScaner:
                     if n % sample_step == 0:
                         cache = LibScaner.packageAsCache(source)
                         # LibScaner.updateCommon(n, cache, video_info)
-                        LibScaner.updateWithYOLO(n, cache, video_info)
+                        LibScaner.updateWithYOLO(n, cache.bgr, cache, video_info)
                     bar.update(1)
                     schedule_call('扫描视频-运行中', float((n+1)/len(reader_iterator)))
                 LibScaner.resetYOLOTracker()
@@ -626,6 +630,34 @@ class LibScaner:
                     schedule_call('扫描视频-后处理', None)
                     video_info.dumpInfoToJson(kwargs['path_out_json'])
                 return video_info
+
+    @staticmethod
+    def inferenceOnVideo2(path_in_video, **kwargs) -> VideoInfo:
+        with XContextTimer(True) as context:
+            parameters = dict(persist=True, conf=0.25, iou=0.7, classes=[0], tracker='bytetrack.yaml', verbose=False)
+            module = XManager.getModules('ultralytics')['yolo11m-pose']
+            results = module.track(path_in_video, **parameters)
+            fixed_num = 0
+            for n in range(len(results)):
+                result = results[n]
+                number = len(result)
+                if number > 0 and result.boxes.id is not None:
+                    fixed_num = max(fixed_num, number)
+
+            schedule_call = kwargs.pop('schedule_call', lambda *_args, **_kwargs: None)
+            video_info = VideoInfo(fixed_num=fixed_num)
+            reader = XVideoReader(path_in_video)
+            for n in range(len(results)):
+                ret, bgr = reader.read()
+                if ret is True:
+                    LibScaner.updateWithYOLO(n, bgr, results[n], video_info)
+                schedule_call('扫描视频-运行中', float((n + 1) / len(results)))
+            LibScaner.resetYOLOTracker()
+            video_info.updatePersonList([])  # end the update
+            if 'path_out_json' in kwargs and isinstance(kwargs['path_out_json'], str):
+                schedule_call('扫描视频-后处理', None)
+                video_info.dumpInfoToJson(kwargs['path_out_json'])
+            return video_info
 
     @staticmethod
     def inferenceOnImage(source, **kwargs):

@@ -165,7 +165,7 @@ class MaskingVideoWorker(threading.Thread):
         assert isinstance(config, dict)
         writer = XVideoWriter(config)
         writer.open(path_video_out)
-        writer.visual_index = True
+        # writer.visual_index = True
         for worker in worker_list:
             assert isinstance(worker, MaskingVideoWorker)
             writer.dump(worker.getResult())

@@ -85,32 +85,34 @@ class MaskingHelper:
         return mask
 
     @staticmethod
-    def getHeadMaskByParsing(bgr, box, value=255) -> np.ndarray:
+    def getHeadMaskByParsing(bgr, box_src, box_tar, value=255) -> np.ndarray:
         module = XManager.getModules('ultralytics')['yolo11m-seg']
         result = module(bgr, classes=[0], verbose=False)[0]
         if len(result) > 0 and result.masks is not None:
             masks = np.round(result.masks.cpu().numpy().data * 255).astype(np.uint8)  # note: C,H,W and [0,1]
             mask_resized = [cv2.resize(masks[n, :, :], bgr.shape[:2][::-1]) for n in range(len(masks))]
             mask_box = np.zeros(shape=mask_resized[0].shape, dtype=np.uint8)
-            lft, top, rig, bot = box
+            lft, top, rig, bot = box_src
             mask_box[top:bot, lft:rig] = 255
             count_nonzero = []
             for n in range(len(mask_resized)):
-                count_nonzero.append(np.count_nonzero(((mask_resized[n] > 0) & (mask_box > 0)).astype(np.uint8)))
+                mm = ((mask_resized[n] > 0) & (mask_box > 0)).astype(np.uint8)
+                count_nonzero.append(np.count_nonzero(mm))
             index = int(np.argmax(np.array(count_nonzero, dtype=np.int32)))
             mask_cur = cv2.resize(masks[index, :, :], bgr.shape[:2][::-1])
             bgr_copy = np.copy(bgr)
-            bgr_copy[mask_cur > 0] = bgr[mask_cur > 0]
+            bgr_copy[mask_cur == 0] = 255
             # processing with masked-bgr
-            cache = XPortrait(bgr_copy[top:bot, lft:rig, :])
+            lft_tar, top_tar, rig_tar, bot_tar = box_tar if box_tar is not None else box_src
+            cache = XPortrait(bgr_copy[top_tar:bot_tar, lft_tar:rig_tar, :])
             parsing = cache.parsing
             mask = np.where((0 < parsing) & (parsing < 15) & (parsing != 12), value, 0).astype(np.uint8)
             mask_single = MaskingHelper.getSingleConnectedRegion(mask) * value
             return mask_single
         else:
-            lft, top, rig, bot = box
+            lft, top, rig, bot = box_tar
             cache = XPortrait(bgr[top:bot, lft:rig, :])
-            return MaskingHelper.getFaceMaskByPoints(cache, box)
+            return MaskingHelper.getFaceMaskByPoints(cache, box_tar)
 
     @staticmethod
     def getHeadMaskByParsing2(bgr, box, value=255) -> np.ndarray:
@@ -168,8 +170,8 @@ class MaskingHelper:
             mask[top:bot, lft:rig] = MaskingHelper.getFaceMaskByPoints(XPortrait(bgr[top:bot, lft:rig, :]), box)
         elif align_type == 'head':
             mask = np.zeros(shape=(h, w), dtype=np.uint8)
-            lft, top, rig, bot = Rectangle(box).toSquare().expand(0.8, 0.8).clip(0, 0, w, h).asInt()
-            mask[top:bot, lft:rig] = MaskingHelper.getHeadMaskByParsing(bgr, (lft, top, rig, bot))
+            # lft, top, rig, bot = Rectangle(box).toSquare().expand(0.2, 0.2).clip(0, 0, w, h).asInt()
+            mask[top:bot, lft:rig] = MaskingHelper.getHeadMaskByParsing(bgr, (lft, top, rig, bot), None)
             # mask[box[3]:, :] = 0
         else:
             mask = MaskingHelper.getMaskFromBox(h, w, box, ratio=0.)
