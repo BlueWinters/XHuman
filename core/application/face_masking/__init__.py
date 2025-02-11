@@ -1,7 +1,7 @@
 
 import logging
 
-__version__ = '0.2.12'
+__version__ = '0.2.13'
 logging.error('face_masking version: {}'.format(__version__))
 
 """
@@ -44,5 +44,7 @@ version - 0.2.10
     note: optimize image helper
 version - 0.2.12
     note: fix bug of rendering and task-2332
+version - 0.2.13
+    note: fix task-2337
 """
 

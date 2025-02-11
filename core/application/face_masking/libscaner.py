@@ -10,6 +10,7 @@ import tqdm
 import json
 import skimage
 from .boundingbox import BoundingBox
+from .yolo import YOLOResult
 from ...base.cache import XPortrait, XPortraitHelper
 from ...thirdparty.cache import XBody, XBodyHelper
 from ...utils.context import XContextTimer
@@ -129,7 +130,7 @@ class Person:
                 image=np.copy(bgr), face=np.copy(bgr[top:bot, lft:rig]))
         else:
             # just update the preview face
-            if box_face_score < self.preview['box_score'] and (self.preview['box_score'] - box_face_score) > 0.1:
+            if box_face_score > self.preview['box_score'] and (box_face_score - self.preview['box_score']) > 0.1:
                 # lft, top, rig, bot = box_face
                 lft, top, rig, bot = BoundingBox(box_face).expand(0.2, 0.2).clip(0, 0, w, h).asInt()
                 self.preview = dict(
@@ -467,13 +468,13 @@ class LibScaner:
             if points[4, 0] < points[2, 0] < points[0, 0] < points[1, 0] < points[3, 0]:
                 bbox = BoundingBox(np.array([lft, top, rig, bot], dtype=np.int32)).toSquare().clip(0, 0, w-1, h-1).asInt()
                 if confidence[0] > threshold:
-                    return np.array(bbox, dtype=np.int32), 1 + np.mean(1-confidence[5:])
+                    return np.array(bbox, dtype=np.int32), np.sum(confidence[:5])  # 1 + np.mean(1-confidence[5:])
                 else:
-                    return np.array(bbox, dtype=np.int32), 4 + np.mean(1-confidence[5:])
+                    return np.array(bbox, dtype=np.int32),  np.sum(confidence[:5])  # 4 + np.mean(1-confidence[5:])
             else:
                 if confidence[1] > threshold and confidence[2] > threshold:
                     bbox = LibScaner.realignFace(points, w, h, index=[2, 1, 0])
-                    return np.array(bbox, dtype=np.int32), 4 + np.mean(1 - confidence[5:])
+                    return np.array(bbox, dtype=np.int32),  np.sum(confidence[:5])  # 4 + np.mean(1 - confidence[5:])
         if confidence[3] > threshold and confidence[1] > threshold:
             rig = points[3, 0]  # points[1, 0] < points[3, 0]
             if confidence[2] > threshold:
@@ -488,7 +489,7 @@ class LibScaner:
                     bbox = BoundingBox(np.array([lft, top, rig, bot], dtype=np.int32)).toSquare().clip(0, 0, w-1, h-1).asInt()
                 else:
                     bbox = LibScaner.realignFace(points, w, h, index=[2, 1, 0])
-                return np.array(bbox, dtype=np.int32), 2 + np.mean(1-confidence[5:])
+                return np.array(bbox, dtype=np.int32),  np.sum(confidence[:5])  # 2 + np.mean(1-confidence[5:])
             if confidence[0] > threshold:
                 if points[0, 0] < points[1, 0] < points[3, 0]:
                     lft = points[0, 0] - abs(points[0, 0] - points[1, 0])  # min(lft, points[0, 0])
@@ -499,7 +500,7 @@ class LibScaner:
                     bbox = BoundingBox(np.array([lft, top, rig, bot], dtype=np.int32)).toSquare().clip(0, 0, w-1, h-1).asInt()
                 else:
                     bbox = LibScaner.realignFace(points, w, h, index=[1, 0])
-                return np.array(bbox, dtype=np.int32), 3 + np.mean(1-confidence[5:])
+                return np.array(bbox, dtype=np.int32),  np.sum(confidence[:5])  # 3 + np.mean(1-confidence[5:])
         if confidence[4] > threshold and confidence[2] > threshold:
             lft = points[4, 0]
             if confidence[1] > threshold:
@@ -514,7 +515,7 @@ class LibScaner:
                     bbox = BoundingBox(np.array([lft, top, rig, bot], dtype=np.int32)).toSquare().clip(0, 0, w-1, h-1).asInt()
                 else:
                     bbox = LibScaner.realignFace(points, w, h, index=[2, 1, 0])
-                return np.array(bbox, dtype=np.int32), 2 + np.mean(1-confidence[5:])
+                return np.array(bbox, dtype=np.int32),  np.sum(confidence[:5])  # 2 + np.mean(1-confidence[5:])
             if confidence[0] > threshold:
                 if points[4, 0] < points[2, 0] < points[0, 0]:
                     rig = points[0, 0] + abs(points[2, 0] - points[0, 0])  # min(lft, points[0, 0])
@@ -525,8 +526,8 @@ class LibScaner:
                     bbox = BoundingBox(np.array([lft, top, rig, bot], dtype=np.int32)).toSquare().clip(0, 0, w-1, h-1).asInt()
                 else:
                     bbox = LibScaner.realignFace(points, w, h, index=[2, 0])
-                return np.array(bbox, dtype=np.int32), 3 + np.mean(1-confidence[5:])
-        return np.array([0, 0, 0, 0], dtype=np.int32), 4 + np.mean(1-confidence[5:])
+                return np.array(bbox, dtype=np.int32), np.sum(confidence[:5])  # 3 + np.mean(1-confidence[5:])
+        return np.array([0, 0, 0, 0], dtype=np.int32),  np.sum(confidence[:5])  # 4 + np.mean(1-confidence[5:])
 
     @staticmethod
     def hasOverlap(box, n):
@@ -555,20 +556,21 @@ class LibScaner:
         number = len(result)
         # num_max = min(number, video_info.person_fixed_num) if video_info.isFixedNumber else number
         if number > 0 and result.boxes.id is not None:
-            cls = np.reshape(np.round(result.boxes.cls.cpu().numpy()).astype(np.int32), (-1,))
-            box = np.reshape(np.round(result.boxes.xyxy.cpu().numpy()).astype(np.int32), (-1, 4,))
-            points = np.reshape(result.keypoints.data.cpu().numpy().astype(np.float32), (-1, 17, 3))
-            score = np.reshape(result.boxes.conf.cpu().numpy().astype(np.float32), (-1,))
-            identity = np.reshape(result.boxes.id.cpu().numpy().astype(np.int32), (-1,))
+            # classify = np.reshape(np.round(result.boxes.cls.cpu().numpy()).astype(np.int32), (-1,))
+            # boxes = np.reshape(np.round(result.boxes.xyxy.cpu().numpy()).astype(np.int32), (-1, 4,))
+            # points = np.reshape(result.keypoints.data.cpu().numpy().astype(np.float32), (-1, 17, 3))
+            # scores = np.reshape(result.boxes.conf.cpu().numpy().astype(np.float32), (-1,))
+            # identity = np.reshape(result.boxes.id.cpu().numpy().astype(np.int32), (-1,))
+            classify, scores, identity, boxes, points = YOLOResult.refineByNMS(result, [])
             # update common(tracking without lose)
-            index_list = np.argsort(score)[::-1].tolist()
+            index_list = np.argsort(scores)[::-1].tolist()
             for i, n in enumerate(index_list):
-                cur_one_box_tracker = box[n, :]  # 4: lft,top,rig,bot
-                l,t,r,b = box[n]
+                cur_one_box_tracker = boxes[n, :]  # 4: lft,top,rig,bot
+                # l,t,r,b = box[n]
                 cur_one_box_face, box_face_score = LibScaner.transformPoints2FaceBox(frame_bgr, points[n, :, :], cur_one_box_tracker)
-                box_face_score = box_face_score if LibScaner.hasOverlap(box, n) is False and number == video_info.person_fixed_num else 4
+                # box_face_score = box_face_score if LibScaner.hasOverlap(box, n) is False and number == video_info.person_fixed_num else 0
                 index = LibScaner.matchPrevious(video_info.person_list_current, int(identity[n]))
-                if cls[n] != 0:
+                if classify[n] != 0:
                     index_list.remove(n)
                     continue  # only person id needed
                 if index != -1:
@@ -580,9 +582,9 @@ class LibScaner:
                     continue
             # update from history
             for i, n in enumerate(index_list):
-                cur_one_box_tracker = box[n, :]  # 4: lft,top,rig,bot
+                cur_one_box_tracker = boxes[n, :]  # 4: lft,top,rig,bot
                 cur_one_box_face, box_face_score = LibScaner.transformPoints2FaceBox(frame_bgr, points[n, :, :], cur_one_box_tracker)
-                box_face_score = box_face_score if LibScaner.hasOverlap(box, n) is False and number == video_info.person_fixed_num else 4
+                # box_face_score = box_face_score if LibScaner.hasOverlap(box, n) is False and number == video_info.person_fixed_num else 0
                 iou_max_idx, iou_max_val, dis_min_idx, dis_min_val = LibScaner.findBestMatch(video_info.person_list_current, cur_one_box_tracker)
                 if iou_max_idx != -1 and (iou_max_val > LibScaner.IOU_Threshold or video_info.isFixedNumber):
                     person_cur = video_info.person_list_current.pop(iou_max_idx)
@@ -637,7 +639,7 @@ class LibScaner:
     @staticmethod
     def inferenceOnVideo2(path_in_video, **kwargs) -> VideoInfo:
         with XContextTimer(True) as context:
-            parameters = dict(persist=True, conf=0.25, iou=0.7, classes=[0], tracker='bytetrack.yaml', verbose=False)
+            parameters = dict(persist=True, conf=0.4, iou=0.6, classes=[0], tracker='bytetrack.yaml', verbose=False)
             module = XManager.getModules('ultralytics')['yolo11m-pose']
             results = module.track(path_in_video, **parameters)
             fixed_num = 0
@@ -645,6 +647,8 @@ class LibScaner:
                 result = results[n]
                 number = len(result)
                 if number > 0 and result.boxes.id is not None:
+                    result_refine = YOLOResult.refineByNMS(result, [])
+                    number = len(result_refine[0])
                     fixed_num = max(fixed_num, number)
 
             schedule_call = kwargs.pop('schedule_call', lambda *_args, **_kwargs: None)
