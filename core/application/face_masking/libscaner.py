@@ -45,7 +45,7 @@ class Person:
 
     @staticmethod
     def loadFromDict(info_dict):
-        person = Person(info_dict['identity'])
+        person = Person(info_dict['identity'], -1)
         person.frame_info_list = [PersonFrameInfo.fromString(each) for each in info_dict['frame_info_list']]
         if 'preview' in info_dict:
             person.loadPreviewFromJson(info_dict['preview'])
@@ -53,8 +53,9 @@ class Person:
 
     """
     """
-    def __init__(self, identity):
+    def __init__(self, identity, yolo_identity):
         self.identity = identity
+        self.yolo_identity = yolo_identity
         self.activate = True
         self.preview = None
         self.frame_info_list = []
@@ -225,7 +226,7 @@ class VideoInfo:
             self.person_identity_history.append(person)
         self.person_list_current += person_list_new
 
-    def createNewPerson(self, index_frame, bgr, box_tracker, box_face, box_face_score):
+    def createNewPerson(self, index_frame, bgr, yolo_identity, box_tracker, box_face, box_face_score):
         if self.isFixedNumber and self.person_identity_seq == self.person_fixed_num:
             if len(self.person_identity_history) > 0:
                 non_activate_index = [n for n, person in enumerate(self.person_identity_history) if person.activate is False]
@@ -245,7 +246,7 @@ class VideoInfo:
             return None
         # create person as common
         self.person_identity_seq += 1
-        person = Person(self.person_identity_seq)
+        person = Person(self.person_identity_seq, yolo_identity)
         person.appendInfo(index_frame, bgr, box_tracker, box_face, box_face_score)
         person.setIdentityPreview(index_frame, bgr, box_face, box_face_score)
         return person
@@ -407,7 +408,7 @@ class LibScaner:
                 person_list_new.append(person_cur)
             else:
                 # create a new person
-                person_new = video_info.createNewPerson(index_frame, cache.bgr, cur_one_box, cur_one_box, box_face_score)
+                person_new = video_info.createNewPerson(index_frame, cache.bgr, -1, cur_one_box, cur_one_box, box_face_score)
                 if person_new is None:
                     person_cur = video_info.person_list_current.pop(dis_min_idx)
                     assert isinstance(person_cur, Person)
@@ -427,7 +428,7 @@ class LibScaner:
     def matchPrevious(person_list, identity):
         for n, person in enumerate(person_list):
             assert isinstance(person, Person)
-            if person.identity == identity:
+            if person.yolo_identity == identity:
                 return n
         return -1
 
@@ -563,6 +564,7 @@ class LibScaner:
             index_list = np.argsort(score)[::-1].tolist()
             for i, n in enumerate(index_list):
                 cur_one_box_tracker = box[n, :]  # 4: lft,top,rig,bot
+                l,t,r,b = box[n]
                 cur_one_box_face, box_face_score = LibScaner.transformPoints2FaceBox(frame_bgr, points[n, :, :], cur_one_box_tracker)
                 box_face_score = box_face_score if LibScaner.hasOverlap(box, n) is False and number == video_info.person_fixed_num else 4
                 index = LibScaner.matchPrevious(video_info.person_list_current, int(identity[n]))
@@ -590,7 +592,8 @@ class LibScaner:
                 else:
                     if np.sum(cur_one_box_face) > 0:
                         # create a new person
-                        person_new = video_info.createNewPerson(index_frame, frame_bgr, cur_one_box_tracker, cur_one_box_face, box_face_score)
+                        person_new = video_info.createNewPerson(
+                            index_frame, frame_bgr, int(identity[n]), cur_one_box_tracker, cur_one_box_face, box_face_score)
                         if person_new is None:
                             if len(video_info.person_list_current) == 0:
                                 continue
