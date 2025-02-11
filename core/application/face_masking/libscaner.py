@@ -128,7 +128,7 @@ class Person:
                 image=np.copy(bgr), face=np.copy(bgr[top:bot, lft:rig]))
         else:
             # just update the preview face
-            if box_face_score < self.preview['box_score']:
+            if box_face_score < self.preview['box_score'] and (self.preview['box_score'] - box_face_score) > 0.1:
                 # lft, top, rig, bot = box_face
                 lft, top, rig, bot = BoundingBox(box_face).expand(0.2, 0.2).clip(0, 0, w, h).asInt()
                 self.preview = dict(
