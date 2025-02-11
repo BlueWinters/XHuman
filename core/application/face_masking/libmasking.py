@@ -28,10 +28,10 @@ class LibMasking:
     def benchmarkOnImage():
         from core.thirdparty.cartoon.libcartoon import LibCartoonWrapperQ
         # N:\archive\2024\1126-video\DanceShow2\01\test-image
-        path_in_image = R'N:\archive\2024\1126-video\error\image\12.png'
-        path_out_json = R'N:\archive\2024\1126-video\error\image\12.json'
-        path_out_image = R'N:\archive\2024\1126-video\error\image\12-output.png'
-        path_visual = R'N:\archive\2024\1126-video\error\image\12-visual.png'
+        path_in_image = R'N:\archive\2024\1126-video\error\image\10.png'
+        path_out_json = R'N:\archive\2024\1126-video\error\image\10.json'
+        path_out_image = R'N:\archive\2024\1126-video\error\image\10-output.png'
+        path_visual = R'N:\archive\2024\1126-video\error\image\10-visual.png'
         video_info, visual_bgr = LibMasking.scanningImage(path_in_image, path_out_json=path_out_json, visual_scanning=True)
         cv2.imwrite(path_visual, visual_bgr)
         # video_info = VideoInfo.loadVideoInfo(path_in_json=path_out_json)
@@ -49,16 +49,20 @@ class LibMasking:
         # options_dict[2] = MaskingOption(301, dict(bgr=sticker, eyes_center_fix=[[397,470], [593,470]]))
         # options_dict[1] = MaskingOption(101, dict(blur_type='blur_gaussian', focus_type='head'))
         # options_dict[2] = MaskingOption(202, dict(mosaic_type='mosaic_pixel_polygon_small', focus_type='head'))
-        # options_dict[1] = MaskingOption(101, dict(blur_type='blur_gaussian', focus_type='head'))
-        # options_dict[3] = MaskingOption(301, dict(bgr=sticker1, eyes_center=[[397, 470], [593, 470]]))
-        # options_dict[4] = MaskingOption(301, dict(bgr=sticker3, eyes_center=[[427, 438], [543, 438]]))
-        # options_dict[5] = MaskingOption(301, dict(bgr=sticker2, eyes_center=[[857, 1735], [1683, 1735]]))
-        # options_dict[6] = MaskingOption(202, dict(mosaic_type='mosaic_pixel_polygon_small_line', focus_type='head'))
-        options_dict[1] = MaskingOption(202, dict(mosaic_type='mosaic_pixel_polygon_big_line', focus_type='head'))
-        options_dict[2] = MaskingOption(202, dict(mosaic_type='mosaic_pixel_polygon_big_line', focus_type='head'))
-        options_dict[3] = MaskingOption(202, dict(mosaic_type='mosaic_pixel_polygon_big_line', focus_type='head'))
+        options_dict[1] = MaskingOption(101, dict(blur_type='blur_gaussian', focus_type='head'))
+        options_dict[2] = MaskingOption(301, dict(bgr=sticker1, eyes_center=[[397, 470], [593, 470]]))
+        options_dict[3] = MaskingOption(301, dict(bgr=sticker3, eyes_center=[[427, 438], [543, 438]]))
+        options_dict[4] = MaskingOption(202, dict(mosaic_type='mosaic_pixel_polygon_big', focus_type='head'))
+        options_dict[5] = MaskingOption(301, dict(bgr=sticker2, eyes_center=[[857, 1735], [1683, 1735]]))
+        options_dict[6] = MaskingOption(202, dict(mosaic_type='mosaic_pixel_polygon_small_line', focus_type='head'))
+        # options_dict[1] = MaskingOption(202, dict(mosaic_type='mosaic_pixel_polygon_small', focus_type='head'))
+        # options_dict[2] = MaskingOption(202, dict(mosaic_type='mosaic_pixel_polygon_small', focus_type='head'))
+        # options_dict[3] = MaskingOption(202, dict(mosaic_type='mosaic_pixel_polygon_small', focus_type='head'))
         # options_dict[4] = MaskingOption(202, dict(mosaic_type='mosaic_pixel_polygon_small_line', focus_type='head'))
-
+        # options_dict[1] = MaskingOption(101, dict(blur_type='blur_gaussian', focus_type='head'))
+        # options_dict[2] = MaskingOption(101, dict(blur_type='blur_motion', focus_type='head'))
+        # options_dict[3] = MaskingOption(101, dict(blur_type='blur_water', focus_type='head'))
+        # options_dict[4] = MaskingOption(101, dict(blur_type='blur_diffuse', focus_type='head'))
         result = LibMasking.maskingImage(path_in_image, options_dict, path_in_json=path_out_json)
         cv2.imwrite(path_out_image, result)
 
@@ -86,27 +90,28 @@ class LibMasking:
         # path_out_video_scanning = R'N:\archive\2024\1126-video\error\2\input-scanning.mp4'
         # path_out_video_masking = R'N:\archive\2024\1126-video\error\2\input-masking-blur.mp4'
 
-        path_in_video = R'N:\archive\2024\1126-video\error\11\input.mp4'
-        path_out_json = R'N:\archive\2024\1126-video\error\11\input.json'
-        path_out_video_scanning = R'N:\archive\2024\1126-video\error\11\input-scanning.mp4'
-        path_out_video_masking = R'N:\archive\2024\1126-video\error\11\input-masking-blur.mp4'
+        path_in_video = R'N:\archive\2024\1126-video\error\6\input.mp4'
+        path_out_json = R'N:\archive\2024\1126-video\error\6\input.json'
+        path_out_video_scanning = R'N:\archive\2024\1126-video\error\6\input-scanning.mp4'
+        path_out_video_masking = R'N:\archive\2024\1126-video\error\6\input-masking-blur.mp4'
 
         # pipeline
         video_info = LibMasking.scanningVideo(path_in_video, path_out_json=path_out_json, path_out_video=path_out_video_scanning)
+
         # video_info = VideoInfo.loadVideoInfo(path_in_json=path_out_json)
-        options_dict = MaskingOption.getRandomMaskingOptionDict(video_info.person_identity_history)
+        # options_dict = MaskingOption.getRandomMaskingOptionDict(video_info.person_identity_history)
         # options_dict = dict()
-        # for identity, data in video_info.getIdentityPreviewDict().items():
+        for identity, data in video_info.getIdentityPreviewDict().items():
         #     bgr = data['image']
         #     box = data['box']
-        #     cv2.imwrite(R'N:\archive\2024\1126-video\error\preview-{}.png'.format(identity), data['face'])
+            cv2.imwrite(R'N:\archive\2024\1126-video\error\6\preview-{}.png'.format(identity), data['face'])
         #     # try:
         #     bgr_style, crop_box = LibCartoonWrapperQ.inference(np.copy(bgr), np.array(box, dtype=np.int32).tolist())
         #     options_dict[identity] = MaskingOption(301, dict(bgr=bgr_style, box=crop_box))
         #     cv2.imwrite(R'N:\archive\2024\1126-video\error\cartoon-{}.png'.format(identity), bgr_style)
         #     # except:
         #     #     pass
-        LibMasking.maskingVideo(path_in_video, options_dict, path_out_video_masking, path_in_json=path_out_json, debug_mode=True)
+        # LibMasking.maskingVideo(path_in_video, options_dict, path_out_video_masking, path_in_json=path_out_json, debug_mode=True)
         # LibMasking.maskingVideoOld(path_in_video, options_dict, path_out_video_masking, path_in_json=path_out_json)
 
         # path_in_video = R'N:\archive\2024\1126-video\DanceShow4\input.mp4'
@@ -154,13 +159,13 @@ class LibMasking:
     """
     """
     @staticmethod
-    def maskingSingleFace(index_frame, bgr, box, masking_option: MaskingOption):
+    def maskingSingleFace(index_frame, bgr, canvas, box, masking_option: MaskingOption):
         if masking_option.option_code in MaskingOption.MaskingOption_Blur:
-            return LibMasking_Blur.inferenceWithBox(bgr, box, masking_option)
+            return LibMasking_Blur.inferenceWithBox(bgr, canvas, box, masking_option)
         if masking_option.option_code in MaskingOption.MaskingOption_Mosaic:
-            return LibMasking_Mosaic.inferenceWithBox(bgr, box, masking_option)
+            return LibMasking_Mosaic.inferenceWithBox(bgr, canvas, box, masking_option)
         if masking_option.option_code in MaskingOption.MaskingOption_Sticker:
-            return LibMasking_Sticker.inferenceWithBox(bgr, box, masking_option)
+            return LibMasking_Sticker.inferenceWithBox(bgr, canvas, box, masking_option)
         raise NotImplementedError(masking_option)
 
     """
@@ -208,12 +213,13 @@ class LibMasking:
         with XContextTimer(True):
             with tqdm.tqdm(total=len(reader)) as bar:
                 for index_frame, bgr in enumerate(reader):
+                    canvas = np.copy(bgr)
                     for _, (person, it) in enumerate(iterator_list):
                         info: PersonFrameInfo = it.next()
                         if info.index_frame == index_frame:
                             if person.identity in options_dict:
                                 masking_option = options_dict[person.identity]
-                                bgr = LibMasking.maskingSingleFace(index_frame, bgr, info.box_face, masking_option)
+                                bgr = LibMasking.maskingSingleFace(index_frame, bgr, canvas, info.box_face, masking_option)
                                 # if np.sum(info.box_face) == 0:
                                 #     bgr = LibMasking.maskingSingleFace(index_frame, bgr, it.previous().box_face, masking_option)
                                 # else:
@@ -275,11 +281,12 @@ class LibMasking:
             options_dict = MaskingOption.getRandomMaskingOptionDict(video_info.person_identity_history)
         iterator_list = [(person, person.getInfoIterator()) for person in video_info.person_identity_history]
         bgr = cv2.imread(path_image_or_bgr) if isinstance(path_image_or_bgr, str) else np.array(path_image_or_bgr, dtype=np.uint8)
+        canvas = np.copy(bgr)
         for n, (person, it) in enumerate(iterator_list):
             info: PersonFrameInfo = it.next()
             if person.identity in options_dict:
                 masking_option = options_dict[person.identity]
-                bgr = LibMasking.maskingSingleFace(0, bgr, info.box_face, masking_option)
+                canvas = LibMasking.maskingSingleFace(n, bgr, canvas, info.box_face, masking_option)
                 schedule_call('打码图片', float((n + 1) / len(iterator_list)))
-        return bgr
+        return canvas
 

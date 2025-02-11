@@ -214,36 +214,36 @@ class LibMasking_Blur:
         return np.round(fusion).astype(np.uint8)
 
     @staticmethod
-    def inferenceWithBox(bgr, box, masking_option):
+    def inferenceWithBox(bgr, canvas, box, masking_option):
         parameters = masking_option.parameters
         blur_type = parameters['blur_type']
         focus_type = parameters['focus_type']
         if blur_type == 'blur_gaussian':
             blur_kernel = parameters['blur_kernel'] if 'blur_kernel' in parameters else 15
-            return LibMasking_Blur.inferenceOnBox_WithBlurGaussian(bgr, box, blur_kernel, focus_type=focus_type)
+            return LibMasking_Blur.inferenceOnBox_WithBlurGaussian(bgr, canvas, box, blur_kernel, focus_type=focus_type)
         if blur_type == 'blur_motion':
             blur_kernel = parameters['blur_kernel'] if 'blur_kernel' in parameters else 15
-            return LibMasking_Blur.inferenceOnBox_WithBlurMotion(bgr, box, blur_kernel, focus_type=focus_type)
+            return LibMasking_Blur.inferenceOnBox_WithBlurMotion(bgr, canvas, box, blur_kernel, focus_type=focus_type)
         if blur_type == 'blur_water':
             rotation_degree = parameters['rotation_degree'] if 'rotation_degree' in parameters else 2
             water_length = parameters['water_length'] if 'water_length' in parameters else 8
             map_coordinates = parameters['map_coordinates'] if 'map_coordinates' in parameters else None
             blur_bgr, map_coordinates = LibMasking_Blur.inferenceOnBox_WithBlurWater(
-                bgr, box, rotation_degree, water_length, focus_type=focus_type, map_coordinates=map_coordinates)
+                bgr, canvas, box, rotation_degree, water_length, focus_type=focus_type, map_coordinates=map_coordinates)
             parameters['map_coordinates'] = map_coordinates
             return blur_bgr
         if blur_type == 'blur_pencil':
             k_neigh = parameters['k_neigh'] if 'k_neigh' in parameters else 17
             pre_k = parameters['pre_k'] if 'pre_k' in parameters else 3
             post_k = parameters['post_k'] if 'post_k' in parameters else 3
-            return LibMasking_Blur.inferenceOnBox_WithBlurDiffusion(bgr, box, k_neigh, pre_k, post_k, focus_type=focus_type)
+            return LibMasking_Blur.inferenceOnBox_WithBlurDiffusion(bgr, canvas, box, k_neigh, pre_k, post_k, focus_type=focus_type)
         if blur_type == 'blur_diffuse':
             k_neigh = parameters['k_neigh'] if 'k_neigh' in parameters else 17
-            return LibMasking_Blur.inferenceOnBox_WithBlurDiffusion(bgr, box, k_neigh, 0, 0, focus_type=focus_type)
+            return LibMasking_Blur.inferenceOnBox_WithBlurDiffusion(bgr, canvas, box, k_neigh, 0, 0, focus_type=focus_type)
         raise NotImplementedError(parameters)
 
     @staticmethod
-    def inferenceOnBox_WithBlurGaussian(bgr, box, blur_kernel, focus_type):
+    def inferenceOnBox_WithBlurGaussian(bgr, canvas, box, blur_kernel, focus_type):
         h, w = bgr.shape[:2]
         blured_bgr = LibMasking_Blur.doWithGaussianBlur(bgr, kernel=blur_kernel)
         if focus_type == 'face':
@@ -258,10 +258,10 @@ class LibMasking_Blur:
             mask[box[3]:, :] = 0
         else:
             mask = LibMasking_Blur.getMaskFromBox(h, w, box, ratio=0.)
-        return LibMasking_Blur.workOnSelected(bgr, blured_bgr, mask=mask)
+        return LibMasking_Blur.workOnSelected(canvas, blured_bgr, mask=mask)
 
     @staticmethod
-    def inferenceOnBox_WithBlurMotion(bgr, box, blur_kernel, focus_type):
+    def inferenceOnBox_WithBlurMotion(bgr, canvas, box, blur_kernel, focus_type):
         h, w = bgr.shape[:2]
         blured_bgr = LibMasking_Blur.doWithBlurMotion(bgr, kernel=blur_kernel)
         if focus_type == 'face':
@@ -276,10 +276,10 @@ class LibMasking_Blur:
             mask[box[3]:, :] = 0
         else:
             mask = LibMasking_Blur.getMaskFromBox(h, w, box, ratio=0.)
-        return LibMasking_Blur.workOnSelected(bgr, blured_bgr, mask=mask)
+        return LibMasking_Blur.workOnSelected(canvas, blured_bgr, mask=mask)
 
     @staticmethod
-    def inferenceOnBox_WithBlurWater(bgr, box, a, b, focus_type, map_coordinates=None):
+    def inferenceOnBox_WithBlurWater(bgr, canvas, box, a, b, focus_type, map_coordinates=None):
         h, w = bgr.shape[:2]
         lft, top, rig, bot = box
         if focus_type == 'face':
@@ -299,10 +299,10 @@ class LibMasking_Blur:
         blured_bgr = cv2.resize(blured_bgr, part.shape[:2][::-1])
         copy_bgr = np.copy(bgr)
         copy_bgr[top:bot, lft:rig, :] = blured_bgr
-        return LibMasking_Blur.workOnSelected(bgr, copy_bgr, mask=mask), map_coordinates
+        return LibMasking_Blur.workOnSelected(canvas, copy_bgr, mask=mask), map_coordinates
 
     @staticmethod
-    def inferenceOnBox_WithBlurDiffusion(bgr, box, k_neigh, pre_k, post_k, focus_type):
+    def inferenceOnBox_WithBlurDiffusion(bgr, canvas, box, k_neigh, pre_k, post_k, focus_type):
         h, w = bgr.shape[:2]
         blured_bgr = LibMasking_Blur.doWithBlurDiffusion(bgr, k_neigh, pre_k, post_k)
         if focus_type == 'face':
@@ -317,7 +317,7 @@ class LibMasking_Blur:
             mask[box[3]:, :] = 0
         else:
             mask = LibMasking_Blur.getMaskFromBox(h, w, box, ratio=0.)
-        return LibMasking_Blur.workOnSelected(bgr, blured_bgr, mask=mask)
+        return LibMasking_Blur.workOnSelected(canvas, blured_bgr, mask=mask)
 
     """
     """

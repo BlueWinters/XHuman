@@ -63,7 +63,6 @@ class LibMasking_Sticker:
         box_src = np.reshape(np.array(box, dtype=np.int32), (1, 4))
         box_cur = np.reshape(np.array(cache.box, dtype=np.int32), (-1, 4))
         iou = BoundingBox.computeIOU(boxes1=box_src, boxes2=box_cur)  # 1,N
-        print(iou.shape)
         return int(np.argmax(iou[0, :]))
 
     @staticmethod
@@ -83,7 +82,7 @@ class LibMasking_Sticker:
                 bar.update(1)
 
     @staticmethod
-    def inferenceWithBox(bgr, box, masking_option):
+    def inferenceWithBox(bgr, canvas, box, masking_option):
         sticker = masking_option.parameters
         if isinstance(sticker, np.ndarray):
             assert sticker.shape[2] == 3 or sticker.shape[2] == 4, sticker.shape[2]
@@ -108,13 +107,13 @@ class LibMasking_Sticker:
                 mask = sticker_mask.astype(np.float32) / 255.
                 fusion = part * (1 - mask) + sticker_bgr * mask
                 fusion_bgr = np.round(fusion).astype(np.uint8)
-                bgr_copy = np.copy(bgr)
+                bgr_copy = np.copy(canvas)
                 bgr_copy[top:bot, lft:rig, :] = fusion_bgr
                 return bgr_copy
         if isinstance(sticker, dict):
             sticker_image = sticker['bgr']
             if 'eyes_center' in sticker:
-                ratio = 1.
+                ratio = 0.2
                 h, w, c = bgr.shape
                 lft, top, rig, bot = box
                 hh = bot - top
@@ -135,11 +134,11 @@ class LibMasking_Sticker:
                 sticker_warped = cv2.warpAffine(sticker_image, matrix, **param)
                 sticker_warped_bgr, sticker_warped_alpha = sticker_warped[:, :, :3], sticker_warped[:, :, 3:4]
                 mask = sticker_warped_alpha.astype(np.float32) / 255.
-                fusion = bgr * (1 - mask) + sticker_warped_bgr * mask
+                fusion = canvas * (1 - mask) + sticker_warped_bgr * mask
                 fusion_bgr = np.round(fusion).astype(np.uint8)
                 return fusion_bgr
             if 'eyes_center_fix' in sticker:
-                ratio = 1.5
+                ratio = 0.2
                 h, w, c = bgr.shape
                 lft, top, rig, bot = box
                 hh = bot - top
@@ -164,7 +163,7 @@ class LibMasking_Sticker:
                 sticker_warped = cv2.warpAffine(sticker_image, transform.params[:2, :], **param)
                 sticker_warped_bgr, sticker_warped_alpha = sticker_warped[:, :, :3], sticker_warped[:, :, 3:4]
                 mask = sticker_warped_alpha.astype(np.float32) / 255.
-                fusion = bgr * (1 - mask) + sticker_warped_bgr * mask
+                fusion = canvas * (1 - mask) + sticker_warped_bgr * mask
                 fusion_bgr = np.round(fusion).astype(np.uint8)
                 return fusion_bgr
             if 'align' in sticker:
@@ -190,7 +189,7 @@ class LibMasking_Sticker:
                 sticker_warped = cv2.warpAffine(sticker_image, matrix, **param)
                 sticker_warped_bgr, sticker_warped_alpha = sticker_warped[:, :, :3], sticker_warped[:, :, 3:4]
                 mask = sticker_warped_alpha.astype(np.float32) / 255.
-                fusion = bgr * (1 - mask) + sticker_warped_bgr * mask
+                fusion = canvas * (1 - mask) + sticker_warped_bgr * mask
                 fusion_bgr = np.round(fusion).astype(np.uint8)
                 return fusion_bgr
             if 'box' in sticker:
@@ -211,7 +210,7 @@ class LibMasking_Sticker:
                 mask = sticker_mask.astype(np.float32) / 255.
                 fusion = part * (1 - mask) + sticker_bgr * mask
                 fusion_bgr = np.round(fusion).astype(np.uint8)
-                bgr_copy = np.copy(bgr)
+                bgr_copy = np.copy(canvas)
                 bgr_copy[top:bot, lft:rig, :] = fusion_bgr
                 return bgr_copy
             if 'paste' in sticker:
@@ -226,7 +225,7 @@ class LibMasking_Sticker:
                 result_alpha_resize = cv2.resize(result_alpha, (w_ori, h_ori))
                 result_alpha_resize = result_alpha_resize[:, :, np.newaxis] / 255.0
                 image_C_cartoon = result_nd_resize * result_alpha_resize + (1 - result_alpha_resize) * image_c
-                bgr_copy = np.copy(bgr)
+                bgr_copy = np.copy(canvas)
                 bgr_copy[ltrb[1]:ltrb[3], ltrb[0]:ltrb[2], :] = image_C_cartoon
                 return bgr_copy
 

@@ -101,17 +101,18 @@ class MaskingVideoWorker(threading.Thread):
                 break  # bug for video
             # masking process
             counter += 1
+            canvas = np.copy(bgr)
             for _, (person, it) in enumerate(self.iterator_list):
                 if person.identity in self.options_dict:
                     info = it.next()
                     if info.index_frame == frame_index:
                         masking_option = self.options_dict[person.identity]
-                        bgr = self.trying(frame_index, bgr, info.box_face, masking_option)
+                        canvas = self.trying(frame_index, bgr, canvas, info.box_face, masking_option)
                         it.update()
                     if info.index_frame < frame_index:
                         it.update()
             self.worker_lock.update(self.num_seq, 1)
-            self.result_list.append((frame_index, bgr))
+            self.result_list.append((frame_index, canvas))
             frame_index += 1
             if self.verbose is True:
                 self.worker_lock.info('{:<4d}: {:<4d}({:<4d},{:<4d})'.format(self.num_seq, n, self.index_beg, self.index_end))
