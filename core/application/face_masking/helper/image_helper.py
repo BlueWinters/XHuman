@@ -68,7 +68,6 @@ class MaskingHelper:
     @staticmethod
     def getFaceMaskByPoints(cache, box, top_line='brow', value=255) -> np.ndarray:
         if cache.number == 1:
-            cv2.imwrite(R'N:\archive\2024\1126-video\error\5\m.png', cache.visual_landmarks)
             return XPortraitHelper.getFaceRegion(cache, top_line=top_line, value=value)[0]
         if cache.number > 1:
             box_src = np.reshape(np.array(box, dtype=np.int32), (1, 4))

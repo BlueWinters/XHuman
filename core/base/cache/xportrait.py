@@ -221,19 +221,25 @@ class XPortrait(XCache):
     def visual_boxes(self):
         if not hasattr(self, '_visual_boxes'):
             self._visual_boxes = self._getModule('face_detection').visual_targets_cv2(
-                np.copy(self.bgr), self.score, self.box, self.points, options=(False, False))
+                np.copy(self.bgr), self.score, np.reshape(self.box, (-1, 4)), np.reshape(self.points, (-1, 10)), options=(False, True))
         return self._visual_boxes
 
     @property
     def visual_landmarks(self):
         if not hasattr(self, '_visual_landmarks'):
-            self._visual_landmarks = self._getModule('face_landmark').visual(np.copy(self.bgr), self.landmark)
+            visual = np.copy(self.bgr)
+            for n in range(self.number):
+                visual = self._getModule('face_landmark').visual(visual, self.landmark[n, ...])
+            self._visual_landmarks = visual
         return self._visual_landmarks
 
     @property
     def visual_headpose(self):
         if not hasattr(self, '_visual_headpose'):
-            self._visual_headpose = self._getModule('head_pose').visual(np.copy(self.bgr), self.radian, self.landmark)
+            visual = np.copy(self.bgr)
+            for n in range(self.number):
+                visual = self._getModule('head_pose').visual(visual, self.radian[n, :], self.landmark[n, ...])
+            self._visual_headpose = visual
         return self._visual_headpose
 
     @property

@@ -44,8 +44,8 @@ class XPortraitHelper:
         assert isinstance(cache, XPortrait), type(cache)
         center_each_eyes_list = []
         for n in range(cache.number):
-            center_each_eyes_list.append((np.mean(cache.landmark[n][36:40, :], axis=0), np.mean(cache.landmark[n][42:48, :], axis=0)))
-        return np.reshape(np.array(center_each_eyes_list, dtype=np.float32), (cache.number, 2, 2))  # N,2,2
+            center_each_eyes_list.append((np.mean(cache.landmark[n, 36:40, :], axis=0), np.mean(cache.landmark[n, 42:48, :], axis=0)))
+        return np.stack(center_each_eyes_list, axis=0)  # N,2,2
 
     @staticmethod
     def getFaceRegion(cache, index=None, top_line='brow', value=255):

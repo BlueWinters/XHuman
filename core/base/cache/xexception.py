@@ -1,6 +1,5 @@
 
 
-
 class XPortraitException(Exception):
     def __init__(self, content):
         self.code = content[0]
@@ -8,7 +7,6 @@ class XPortraitException(Exception):
 
     def __str__(self):
         return '"code: {}, info: {}"'.format(self.code, self.info)
-
 
 
 class XPortraitExceptionAssert:
