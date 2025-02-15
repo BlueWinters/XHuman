@@ -3,6 +3,7 @@ import logging
 import numpy as np
 import cv2
 import json
+from ..geometry import GeoFunction
 from .. import XManager
 
 
@@ -15,7 +16,7 @@ class LibFaceLandmark:
             x, y = pts[n].tolist()
             position = (int(round(x)), int(round(y)))
             cv2.circle(bgr, position, r, color)
-            if id == True:
+            if id is True:
                 cv2.putText(bgr, str(n), position, cv2.FONT_HERSHEY_COMPLEX, 0.3, (0, 0, 255), 1)
         return bgr
 
@@ -68,30 +69,53 @@ class LibFaceLandmark:
 
     """
     """
-    def _detectFace(self, bgr, boxes):
-        if boxes is None:
+    def formatInput(self, bgr, image_angles=None, boxes=None, points=None):
+        if boxes is not None:
+            # include image_angles is None or not
+            return self.clipWithBox(bgr, boxes, image_angles, self.fH, self.fW)
+        if boxes is None and image_angles is None:
             module = XManager.getModules('face_detection')
-            scores, boxes, points = module(bgr)
-        return boxes
+            scores, boxes, points, angles = module(bgr, rotations=[0, 90, 180, 270])
+            return self.clipWithBox(bgr, boxes, angles, self.fH, self.fW)
 
-    def _mapBack(self, pts, lft, rig, top, bot):
+    @staticmethod
+    def clipAndResizeB(bgr, pts, angle, box):
         assert len(pts.shape) == 2
-        W = rig - lft + 1
-        H = bot - top + 1
         new_pts = pts.copy().astype(np.float32)
-        new_pts[:, 0] = pts[:, 0] * W + lft
-        new_pts[:, 1] = pts[:, 1] * H + top
+        bgr_rot = GeoFunction.rotateImage(bgr, angle)
+        box_rot = GeoFunction.rotateBoxes(box, angle, bgr.shape[0], bgr.shape[1])
+        lft, top, rig, bot = box_rot.tolist()
+        w = rig - lft + 1
+        h = bot - top + 1
+        new_pts[:, 0] = new_pts[:, 0] * w + lft
+        new_pts[:, 1] = new_pts[:, 1] * h + top
+        angle_back = GeoFunction.rotateBack(angle)
+        new_pts = GeoFunction.rotatePoints(new_pts, angle_back, bgr_rot.shape[0], bgr_rot.shape[1])
         return new_pts
 
-    def _clipAndResize(self, bgr, lft, top, rig, bot, dH, dW, ratio:float=0.1):
-        H, W, C = bgr.shape
+    @staticmethod
+    def clipAndResizeF(bgr, angle, box, dst_h, dst_w):
+        lft, top, rig, bot = box.tolist()
+        h, w, c = bgr.shape
         lft = max(0, lft)
-        lft, rig = max(lft, 0), min(rig, W)
-        top, bot = max(top, 0), min(bot, H)
+        lft, rig = max(lft, 0), min(rig, w)
+        top, bot = max(top, 0), min(bot, h)
         new_bgr = bgr[top:bot+1, lft:rig+1, :]
-        return cv2.resize(new_bgr, (dW, dH))
+        new_bgr_rot = GeoFunction.rotateImage(new_bgr, angle)
+        return cv2.resize(new_bgr_rot, (dst_w, dst_h))
 
-    def _forward(self, batch_bgr):
+    def clipWithBox(self, bgr, boxes, angles, dst_h, dst_w):
+        data = []
+        angles = [0] * len(boxes) if angles is None else angles
+        assert len(angles) == len(boxes), (len(boxes), len(angles))
+        for n, (box, angle) in enumerate(zip(boxes, angles)):
+            assert isinstance(box, np.ndarray) and len(box) == 4, type(box)
+            box_int = np.round(box).astype(np.int32)
+            bgr_fmt = self.clipAndResizeF(bgr, angle, box, dst_h, dst_w)
+            data.append((bgr_fmt, lambda pts, a=angle, b=box_int: self.clipAndResizeB(bgr, pts, a, b)))
+        return data
+
+    def forward(self, batch_bgr):
         assert batch_bgr.shape[1] == self.fH
         assert batch_bgr.shape[2] == self.fW
         assert batch_bgr.shape[3] == 3
@@ -101,49 +125,34 @@ class LibFaceLandmark:
         out = np.reshape(output, (N, self.num_points, 2))
         return out
 
-    def inference(self, bgr, boxes=None):
-        list_bgr_rsz = list()
-        list_clip_box = list()
-        boxes = self._detectFace(bgr, boxes)
-        for n, box in enumerate(boxes):
-            assert isinstance(box, np.ndarray), type(box)
-            if len(box) == 4:
-                lft, top, rig, bot = list(map(int, box))
-                list_clip_box.append((lft, top, rig, bot))
-                bgr_rsz = self._clipAndResize(bgr, lft, top, rig, bot, self.fH, self.fW)
-                list_bgr_rsz.append(bgr_rsz)
-            elif len(box) == 68:
-                points = np.array(box, dtype=np.int32)
-                lft, top = points[:,0].min(), points[:,1].min()
-                rig, bot = points[:,0].max(), points[:,1].max()
-                list_clip_box.append((lft, top, rig, bot))
-                bgr_rsz = self._clipAndResize(bgr, lft, top, rig, bot, self.fH, self.fW)
-                list_bgr_rsz.append(bgr_rsz)
-            else:
-                raise NotImplementedError('invalid input box shape: {}'.format(box.shape))
-        # network inference
+    def inference(self, bgr, image_angles=None, boxes=None, points=None):
+        data = self.formatInput(bgr, image_angles, boxes, points)
         landmarks = np.zeros(shape=(len(boxes), 68, 2), dtype=np.float32)
-        if len(list_bgr_rsz) > 0:
-            batch_pts68 = self._forward(np.array(list_bgr_rsz, dtype=np.uint8))
-            for n in range(len(boxes)):
-                lft, top, rig, bot = list_clip_box[n]
-                points = np.reshape(batch_pts68[n, :, :], (68, 2))
-                points = self._mapBack(points, lft=lft, rig=rig, top=top, bot=bot)
-                landmarks[n, :, :] = points
+        if len(data) > 0:
+            format_bgr_list = [pair[0] for pair in data]
+            batch_pts68 = self.forward(np.array(format_bgr_list, dtype=np.uint8))
+            for n, pair in enumerate(data):
+                assert isinstance(pair, tuple), type(pair)
+                format_bgr, transform_points = pair
+                points68 = np.reshape(batch_pts68[n, :, :], (68, 2))
+                points68_format = transform_points(points68)
+                landmarks[n, :, :] = points68_format
         return np.round(landmarks).astype(np.int32)  # N,68,2 --> N = len(landmarks)
 
     """
     """
-    def _extractArgs(self, *args, **kwargs):
+    def extractArgs(self, *args, **kwargs):
         if len(args) > 0:
             logging.warning('{} useless parameters in {}'.format(
                 len(args), self.__class__.__name__))
         targets = kwargs.pop('targets', 'source')
         boxes = kwargs.pop('boxes', None)
-        inference_kwargs = dict(boxes=boxes)
+        points = kwargs.pop('points', None)
+        image_angles = kwargs.pop('image_angles', None)
+        inference_kwargs = dict(boxes=boxes, points=points, image_angles=image_angles)
         return targets, inference_kwargs
 
-    def _returnResult(self, bgr, output, targets):
+    def returnResult(self, bgr, output, targets):
         def _formatResult(target):
             if target == 'source':
                 return output
@@ -172,6 +181,6 @@ class LibFaceLandmark:
         raise Exception('no such return targets {}'.format(targets))
 
     def __call__(self, bgr, *args, **kwargs):
-        targets, inference_kwargs = self._extractArgs(*args, **kwargs)
+        targets, inference_kwargs = self.extractArgs(*args, **kwargs)
         output = self.inference(bgr, **inference_kwargs)
-        return self._returnResult(bgr, output, targets)
+        return self.returnResult(bgr, output, targets)

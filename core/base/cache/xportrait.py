@@ -64,6 +64,10 @@ class XPortrait(XCache):
         # strategy: 'area', 'score', 'pose
         self.strategy = kwargs.pop('strategy', 'area')
         assert self.strategy in ['area', 'score', 'pose'], self.strategy
+        # rotations: [0, 90, 180, 270]
+        self.rotations = kwargs.pop('rotations', [0])
+        for rot in self.rotations:
+            assert rot in [0, 90, 180, 270], rot
         # assert flag
         self.asserting = kwargs.pop('asserting', False)
 
@@ -133,9 +137,9 @@ class XPortrait(XCache):
     base attribute for face(s)
     """
     @staticmethod
-    def _resort(strategy, scores, boxes, points, landmarks, radians):
+    def _resort(strategy, scores, boxes, points, landmarks, radians, angles):
         def _return(index):
-            return scores[index], boxes[index], points[index], landmarks[index], radians[index]
+            return scores[index], boxes[index], points[index], landmarks[index], radians[index], angles[index]
 
         if strategy == 'area':
             # big --> small
@@ -168,10 +172,13 @@ class XPortrait(XCache):
 
     def _detect(self, bgr):
         from .xexception import XPortraitExceptionAssert
-        module = self._getModule('function')
-        scores, boxes, points, landmarks, radians = module('detect', bgr, 'source')
-        scores, boxes, points, landmarks, radians = self._resort(
-            self.strategy, scores, boxes, points, landmarks, radians)
+        # module = self._getModule('function')
+        # scores, boxes, points, landmarks, radians = module('detect', bgr, 'source')
+        scores, boxes, points, angles = self._getModule('face_detection')(bgr, image_angles=self.rotations)
+        landmarks = self._getModule('face_landmark')(bgr, image_angles=angles, boxes=boxes)
+        radians = self._getModule('head_pose')(bgr, landmarks=landmarks)
+        scores, boxes, points, landmarks, radians, angles = self._resort(
+            self.strategy, scores, boxes, points, landmarks, radians, angles)
         if self.asserting is True:
             XPortraitExceptionAssert.assertNoFace(len(scores))
         self._number = len(scores)
@@ -180,6 +187,7 @@ class XPortrait(XCache):
         self._points = np.reshape(points, (-1, 5, 2))
         self._landmark = np.reshape(landmarks, (-1, 68, 2))
         self._radian = np.reshape(radians, (-1, 3))
+        self._angles = np.reshape(angles, (-1,))
 
     @property
     def number(self):
@@ -216,6 +224,12 @@ class XPortrait(XCache):
         if not hasattr(self, '_radian'):
             self._detect(self.bgr)
         return self._radian
+
+    @property
+    def angles(self):
+        if not hasattr(self, '_angles'):
+            self._detect(self.bgr)
+        return self._angles
 
     @property
     def visual_boxes(self):

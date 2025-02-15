@@ -5,6 +5,7 @@ import logging
 import json
 from itertools import product as product
 from math import ceil
+from ..geometry import GeoFunction
 from .. import XManager
 
 
@@ -176,10 +177,6 @@ class LibFaceDetection:
 
     """
     """
-    def inference(self, bgr, single_scale:bool=True):
-        return self.inference_single_scale(bgr, self.img_h, self.img_w) \
-            if single_scale else self.inference_multi_scale(bgr)
-
     def resize_and_padding(self, image, dH, dW):
         sH, sW, _ = image.shape
         src_ratio = float(sH / sW)
@@ -331,11 +328,12 @@ class LibFaceDetection:
         max_side = max(src_h, src_w)
         resize_h, resize_w = self.img_h, self.img_w
         while resize_h/2 < max_side or resize_w/2 < max_side:
-            # print(resize_h, resize_w, max_side)
+            # source direction
             scores, boxes, points = self.inference_single_scale(bgr, resize_h=resize_h, resize_w=resize_w)
             scores_collect.append(scores)
             boxes_collect.append(boxes)
             points_collect.append(points)
+            # rotate 180
             resize_h, resize_w = resize_h * 2, resize_w * 2
         # NMS
         scores = np.concatenate(scores_collect, axis=0)
@@ -345,7 +343,63 @@ class LibFaceDetection:
         scores = scores[keep]
         boxes = boxes[keep]
         points = points[keep]
-        return (scores, boxes, points)
+        return scores, boxes, points
+
+    def inference_with_rotation(self, bgr, single_scale=True, image_angle=0):
+        if image_angle == 0:
+            scores, boxes, points = self.inference_single_scale(bgr, self.img_h, self.img_w)
+            angles = np.zeros(shape=len(scores), dtype=np.int32)
+            return scores, boxes, points, angles
+        if image_angle in GeoFunction.CVRotationDict:
+            rot = cv2.rotate(bgr, GeoFunction.CVRotationDict[image_angle])
+            scores, boxes, points = self.inference_single_scale(rot, self.img_h, self.img_w)
+            h, w, c = rot.shape
+            angle_back = GeoFunction.rotateBack(image_angle)
+            boxes = GeoFunction.rotateBoxes(np.reshape(boxes, (-1, 4)), angle_back, h, w)
+            points = GeoFunction.rotatePoints(np.reshape(points, (-1, 5, 2)), angle_back, h, w)
+            boxes = np.reshape(boxes, (-1, 4))
+            points = np.reshape(points, (-1, 10))
+            angles = np.ones(shape=len(scores), dtype=np.int32) * image_angle
+            return scores, boxes, points, angles
+        raise ValueError('angle {} not in [0,90,180,270]'.format(image_angle))
+
+    def inference(self, bgr, single_scale=True, image_angles=None):
+        scores_collect, boxes_collect, points_collect, angles_collect = [], [], [], []
+        if isinstance(image_angles, (list, tuple)):
+            for value in image_angles:
+                assert isinstance(value, (int, float)), value
+                scores, boxes, points, angles = self.inference_with_rotation(bgr, single_scale, value)
+                # print(rot, scores)
+                if len(scores) > 0:
+                    scores_collect.append(scores)
+                    boxes_collect.append(boxes)
+                    points_collect.append(points)
+                    angles_collect.append(angles)
+        else:
+            scores, boxes, points, angles = self.inference_with_rotation(bgr, single_scale, 0)
+            if len(scores) > 0:
+                scores_collect.append(scores)
+                boxes_collect.append(boxes)
+                points_collect.append(points)
+                angles_collect.append(angles)
+        # NMS
+        if len(scores_collect) > 0:
+            scores = np.concatenate(scores_collect, axis=0)
+            boxes = np.concatenate(boxes_collect, axis=0)
+            points = np.concatenate(points_collect, axis=0)
+            angles = np.concatenate(angles_collect, axis=0)
+            keep = self.non_maximum_suppression(scores, boxes, self.nms_threshold)
+            scores = scores[keep]
+            boxes = boxes[keep]
+            points = points[keep]
+            angles = angles[keep]
+        else:
+            scores = np.zeros(shape=(0,), dtype=np.float32)
+            boxes = np.zeros(shape=(0, 4), dtype=np.int32)
+            points = np.zeros(shape=(0, 10), dtype=np.int32)
+            angles = np.zeros(shape=(0,), dtype=np.int32)
+        return (scores, boxes, points) if image_angles is None \
+            else (scores, boxes, points, angles)
 
     """
     """
@@ -355,23 +409,24 @@ class LibFaceDetection:
                 len(args), self.__class__.__name__))
         targets = kwargs.pop('targets', 'source')
         single_scale = bool(kwargs.pop('single_scale', True))
-        return targets, single_scale
+        image_angles = kwargs.pop('image_angles', None)
+        return targets, dict(single_scale=single_scale, image_angles=image_angles)
 
     def _returnResult(self, bgr, output, targets):
         def _formatResult(target):
-            if target == 'source': return output
+            if target == 'source':
+                return output
             if target == 'json':
-                scores, boxes, points = output
+                scores, boxes, points = output[:3]
                 data = list()
                 for s, b, p in zip(scores, boxes, points):
-                    data.append(dict(scores=s.tolist(),
-                        boxes=b.tolist(), points=p.tolist()))
+                    data.append(dict(scores=s.tolist(), boxes=b.tolist(), points=p.tolist()))
                 return json.dumps(data, indent=4)
             if target == 'visual-cv2':
-                scores, boxes, points = output
+                scores, boxes, points = output[:3]
                 return self.visual_targets_cv2(bgr, scores, boxes, points)
             if target == 'visual-plt':
-                scores, boxes, points = output
+                scores, boxes, points = output[:3]
                 return self.visual_targets_plt(bgr, scores, boxes, points)
             raise Exception('no such return type {}'.format(target))
 
@@ -382,6 +437,6 @@ class LibFaceDetection:
         raise Exception('no such return targets {}'.format(targets))
 
     def __call__(self, bgr, *args, **kwargs):
-        targets, single_scale = self._extractArgs(*args, **kwargs)
-        output = self.inference(bgr, single_scale)
+        targets, inference_kwargs = self._extractArgs(*args, **kwargs)
+        output = self.inference(bgr, **inference_kwargs)
         return self._returnResult(bgr, output, targets)

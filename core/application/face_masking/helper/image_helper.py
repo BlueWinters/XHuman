@@ -3,7 +3,7 @@ import cv2
 import numpy as np
 import skimage
 from ....base import XPortrait, XPortraitHelper
-from ....geometry import Rectangle
+from ....geometry import Rectangle, GeoFunction
 from .... import XManager
 
 
@@ -84,7 +84,7 @@ class MaskingHelper:
         return mask
 
     @staticmethod
-    def getHeadMaskByParsing(bgr, box_src, box_tar, value=255) -> np.ndarray:
+    def getHeadMaskByParsing2(bgr, box_src, box_tar, value=255) -> np.ndarray:
         module = XManager.getModules('ultralytics')['yolo11m-seg']
         result = module(bgr, classes=[0], verbose=False)[0]
         if len(result) > 0 and result.masks is not None:
@@ -114,17 +114,21 @@ class MaskingHelper:
             return MaskingHelper.getFaceMaskByPoints(cache, box_tar)
 
     @staticmethod
-    def getHeadMaskByParsing2(bgr, box, value=255) -> np.ndarray:
-        lft, top, rig, bot = box
-        cache = XPortrait(bgr[top:bot, lft:rig, :])
+    def getHeadMaskByParsing(bgr, box_src, box_tar, value=255) -> np.ndarray:
+        lft, top, rig, bot = box_tar
+        cache = XPortrait(bgr[top:bot, lft:rig, :], rotations=[0, 90, 180, 270])
         if cache.number == 1:
-            parsing = cache.parsing
+            rot = GeoFunction.rotateImage(cache.bgr, cache.angles[0])
+            rot_parsing = XManager.getModules('portrait_parsing')(rot)
+            parsing = GeoFunction.rotateImage(rot_parsing, GeoFunction.rotateBack(cache.angles[0]))
             mask = np.where((0 < parsing) & (parsing < 15) & (parsing != 12), value, 0).astype(np.uint8)
             mask_single = MaskingHelper.getSingleConnectedRegion(mask) * value
             return mask_single
         if cache.number > 1:
-            box_src = np.reshape(np.array(box, dtype=np.int32), (1, 4))
+            box_src = np.reshape(np.array(box_src, dtype=np.int32), (1, 4))
             box_cur = np.reshape(np.array(cache.box, dtype=np.int32), (-1, 4))
+            box_cur[:, 0::2] += lft
+            box_cur[:, 1::2] += top
             iou = MaskingHelper.computeIOU(boxes1=box_src, boxes2=box_cur)  # 1,N
             part_copy = np.copy(cache.bgr)
             selected_index = int(np.argmax(iou[0, :]))
@@ -134,8 +138,14 @@ class MaskingHelper:
                     # part_copy[t:b, l:r, :] = 255
                     part_mask = XPortraitHelper.getFaceRegion(cache, index=n, top_line='brow', value=255)[0]
                     part_copy[part_mask > 0] = 255
-            parsing = XPortrait(part_copy).parsing
+            l, t, r, b = cache.box[selected_index, :]
+            part_copy[t:b, l:r, :] = cache.bgr[t:b, l:r, :]
+            # cv2.imwrite(R'N:\archive\2025\0215-masking\error_image\task-2395\mask_parsing\{}.png'.format(box_src), part_copy)
+            rot = GeoFunction.rotateImage(part_copy, cache.angles[0])
+            rot_parsing = XManager.getModules('portrait_parsing')(rot)
+            parsing = GeoFunction.rotateImage(rot_parsing, GeoFunction.rotateBack(cache.angles[0]))
             mask = np.where((0 < parsing) & (parsing < 15) & (parsing != 12), value, 0).astype(np.uint8)
+            # cv2.imwrite(R'N:\archive\2025\0215-masking\error_image\task-2395\mask_parsing\{}-parsing.png'.format(box_src), mask)
             mask_single = MaskingHelper.getSingleConnectedRegion(mask) * value
             return mask_single
         # note: detect face fail

@@ -113,11 +113,12 @@ class LibInsightFaceWrapper:
                 targets='source') if scale > 1 else image
         return image
 
-    def _calculateSimilarity(self, source_face, target_face):
+    @staticmethod
+    def calculateSimilarity(source_face, target_face):
         source_embedding = source_face['embedding']
         target_embedding = target_face['embedding']
         cosine_similarity = source_embedding.dot(target_embedding) / \
-                  (np.linalg.norm(source_embedding) * np.linalg.norm(target_embedding))
+            (np.linalg.norm(source_embedding) * np.linalg.norm(target_embedding))
         return cosine_similarity
 
     def _extractArgsPair(self, *args, **kwargs):
@@ -154,7 +155,7 @@ class LibInsightFaceWrapper:
         if 'calculate_similarity' in process:
             similarity_list = list()
             for target_face in target_face_list:
-                similarity = self._calculateSimilarity(source_face, target_face)
+                similarity = self.calculateSimilarity(source_face, target_face)
                 similarity_list.append(dict(value=similarity, bbox=target_face['bbox']))
             results['similarity'] = sorted(similarity_list, key=lambda sim: sim['value'])
         return results

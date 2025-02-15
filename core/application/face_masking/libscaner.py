@@ -120,22 +120,59 @@ class Person:
             info['frame_info_list'] = [str([info.index_frame, *info.box_face.tolist()]) for info in self.frame_info_list]
         return info
 
-    def setIdentityPreview(self, index_frame, bgr, box_face, box_face_score):
+    def setIdentityPreview(self, index_frame, bgr, box_face, points_scores):
         h, w, c = bgr.shape
+        if isinstance(points_scores, np.ndarray):
+            # video
+            box_face_score = float(np.sum(points_scores[:5]))
+            num_points = int(np.count_nonzero((points_scores[:5] > 0.5).astype(np.int32)))
+        else:
+            # image
+            box_face_score = float(points_scores)
+            num_points = 5
         if self.preview is None:
             # lft, top, rig, bot = box_face
             lft, top, rig, bot = BoundingBox(box_face).expand(0.2, 0.2).clip(0, 0, w, h).asInt()
+            cache = XPortrait(bgr[top:bot, lft:rig])
+            if cache.number == 1:
+                head_pose = int(np.sum(np.abs(cache.radian[0, :2]) * 180 / np.pi))
+                l, t, r, b = BoundingBox(cache.landmark[0]).expand(0.2, 0.2).clip(0, 0, cache.shape[1], cache.shape[0]).asInt()
+                face = np.copy(cache.bgr[t:b, l:r])
+            else:
+                head_pose = 90
+                face = np.copy(bgr[top:bot, lft:rig])
             self.preview = dict(
                 index_frame=index_frame, box=box_face, box_score=box_face_score,
-                image=np.copy(bgr), face=np.copy(bgr[top:bot, lft:rig]))
+                num_points=num_points, head_pose=head_pose,
+                image=np.copy(bgr), face=face, cache=cache)
         else:
             # just update the preview face
-            if box_face_score > self.preview['box_score'] and (box_face_score - self.preview['box_score']) > 0.1:
+            if box_face_score > self.preview['box_score'] and (box_face_score - self.preview['box_score']) > 0.1 \
+                    and num_points >= self.preview['num_points']:
                 # lft, top, rig, bot = box_face
                 lft, top, rig, bot = BoundingBox(box_face).expand(0.2, 0.2).clip(0, 0, w, h).asInt()
-                self.preview = dict(
-                    index_frame=index_frame, box=box_face, box_score=box_face_score,
-                    image=np.copy(bgr), face=np.copy(bgr[top:bot, lft:rig]))
+                cache = XPortrait(bgr[top:bot, lft:rig])
+                if cache.number == 1:
+                    head_pose = int(np.sum(np.abs(cache.radian[0, :2]) * 180 / np.pi))
+                    if head_pose < self.preview['head_pose']:
+                        # print('{}: {:.2f}({},{}) vs {:.2f}({},{})'.format(
+                        #     index_frame,
+                        #     self.preview['box_score'], self.preview['num_points'], self.preview['head_pose'],
+                        #     box_face_score, num_points, head_pose), cache.number)
+                        # cv2.imwrite(R'N:\archive\2024\1126-video\error\2450\vis-{}-{}.png'.format(self.identity, index_frame), cache.visual_boxes)
+                        l, t, r, b = BoundingBox(cache.landmark[0]).expand(0.2, 0.2).clip(0, 0, cache.shape[1], cache.shape[0]).asInt()
+                        face = np.copy(cache.bgr[t:b, l:r])
+                        self.preview = dict(
+                            index_frame=index_frame, box=box_face, box_score=box_face_score,
+                            num_points=num_points, head_pose=head_pose,
+                            image=np.copy(bgr), face=face, cache=cache)
+                else:
+                    head_pose = 90
+                    face = np.copy(bgr[top:bot, lft:rig])
+                    self.preview = dict(
+                        index_frame=index_frame, box=box_face, box_score=box_face_score,
+                        num_points=num_points, head_pose=head_pose,
+                        image=np.copy(bgr), face=face, cache=cache)
 
     def loadPreviewFromJson(self, info):
         if self.preview is None:
@@ -264,7 +301,7 @@ class VideoInfo:
             format_list = [person.getInfoDict(with_frame_info) for person in self.getSortedHistory()]
             json.dump(format_list, file, indent=4)
 
-    def getIdentityPreviewDict(self, size=256, is_bgr=True):
+    def getIdentityPreviewDict(self, face_size_min=64, num_frame_min=30, size=256, is_bgr=True):
         def transform(bgr):
             resized = cv2.resize(bgr, (size, size))
             return resized if is_bgr is True else cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
@@ -272,9 +309,12 @@ class VideoInfo:
         preview_dict = {}
         for person in self.getSortedHistory():
             preview = person.preview
-            preview_dict[person.identity] = dict(
-                box=preview['box'], image=preview['image'],
-                face=transform(preview['face']), index_frame=preview['index_frame'], box_score=preview['box_score'])
+            # print('id-{}, visual_points-{}, face_size-{}, n_frame-{}'.format(
+            #     person.identity, preview['num_points'], min(preview['face'].shape[0:2]), len(person.frame_info_list)))
+            if preview['num_points'] >= 4 and min(preview['face'].shape[0:2]) > face_size_min and len(person.frame_info_list) > num_frame_min:
+                preview_dict[person.identity] = dict(
+                    box=preview['box'], image=preview['image'],
+                    face=transform(preview['face']), index_frame=preview['index_frame'], box_score=preview['box_score'])
         return preview_dict
 
     def getIdentityPreviewList(self, size=256, is_bgr=True):
@@ -283,6 +323,89 @@ class VideoInfo:
             return resized if is_bgr is True else cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
 
         return [transform(person.preview) for person in self.getSortedHistory()]
+
+    @staticmethod
+    def checkConcatenate(obj_info_pre, obj_info_cur, face_size_min=64):
+        assert isinstance(obj_info_pre, Person)
+        assert isinstance(obj_info_cur, Person)
+        frame_index_pre_end = obj_info_pre.frame_info_list[-1].index_frame
+        frame_index_cur_beg = obj_info_cur.frame_info_list[0].index_frame
+        if bool(frame_index_pre_end < frame_index_cur_beg):
+            obj_pre_preview = obj_info_pre.preview
+            obj_cur_preview = obj_info_cur.preview
+            valid_face_pre = bool(obj_pre_preview['num_points'] >= 4 and min(obj_pre_preview['face'].shape[0:2]) > face_size_min)
+            valid_face_cur = bool(obj_cur_preview['num_points'] >= 4 and min(obj_cur_preview['face'].shape[0:2]) > face_size_min)
+            # print('check: id-{}({}), id-{}({})'.format(obj_info_pre.identity, valid_face_pre, obj_info_cur.identity, valid_face_cur))
+            if valid_face_pre and valid_face_cur:
+                module = XManager.getModules('insightface')
+                pre_face_pad_bgr = np.pad(obj_pre_preview['face'], [[256, 256], [256, 256], [0, 0]])
+                cur_face_pad_bgr = np.pad(obj_cur_preview['face'], [[256, 256], [256, 256], [0, 0]])
+                try:
+                    if 'identity_embedding' not in obj_pre_preview:
+                        obj_pre_preview['identity_embedding'] = module(pre_face_pad_bgr)[0]['embedding']
+                    if 'identity_embedding' not in obj_cur_preview:
+                        obj_cur_preview['identity_embedding'] = module(cur_face_pad_bgr)[0]['embedding']
+                    cosine_similarity = obj_pre_preview['identity_embedding'].dot(obj_cur_preview['identity_embedding']) / \
+                        (np.linalg.norm(obj_pre_preview['identity_embedding']) * np.linalg.norm(obj_cur_preview['identity_embedding']))
+                    # print('id-{} vs id-{}: {:.2f}'.format(obj_info_pre.identity, obj_info_cur.identity, cosine_similarity))
+                    if cosine_similarity > 0.6:
+                        return True, cosine_similarity, (frame_index_cur_beg - frame_index_pre_end)
+                except IndexError:
+                    pass  # detect 0 face(s)
+        return False, 0., -1
+
+    def getOnePair(self, exclude_pair_list):
+        obj_cat_pair_list = list()
+        for obj_info_src in self.person_identity_history:
+            for obj_info_tar in self.person_identity_history:
+                exclude_pair = (obj_info_src.identity, obj_info_tar.identity)
+                if exclude_pair in exclude_pair_list:
+                    continue
+                if obj_info_src.identity != obj_info_tar.identity:
+                    flag, sim_value, dis_time = self.checkConcatenate(obj_info_src, obj_info_tar)
+                    if flag is True:
+                        pair_dict = dict(
+                            obj_id_src=obj_info_src.identity, obj_info_src=obj_info_src,
+                            obj_id_tar=obj_info_tar.identity, obj_info_tar=obj_info_tar,
+                            sim_value=sim_value, dis_time=dis_time)
+                        obj_cat_pair_list.append(pair_dict)
+        if len(obj_cat_pair_list) > 0:
+            dtype = [('dis_time', int), ('sim_value', float)]
+            value = [(each['dis_time'], 1-each['sim_value']) for each in obj_cat_pair_list]
+            iou_and_dis_t = np.array(value, dtype=dtype)
+            sorted_index = np.argsort(iou_and_dis_t, order=['dis_time', 'sim_value'])
+            return [obj_cat_pair_list[index] for index in sorted_index]
+        return obj_cat_pair_list
+
+    def merge(self, obj_info_src, obj_info_tar, obj_info_cat):
+        if obj_info_src.preview['head_pose'] < obj_info_tar.preview['head_pose']:
+            obj_info_cat.preview = obj_info_src.preview
+        else:
+            obj_info_cat.preview = obj_info_tar.preview
+        obj_info_cat.frame_info_list = obj_info_src.frame_info_list + obj_info_tar.frame_info_list
+
+    def mergeIdentity(self):
+        def locate(person_identity):
+            for n, person in enumerate(self.person_identity_history):
+                if person.identity == person_identity:
+                    return n
+            return -1
+
+        exclude_pair_list = []
+        while True:
+            obj_cat_pair_list = self.getOnePair(exclude_pair_list)
+            if len(obj_cat_pair_list) == 0:
+                break  # stop concatenation
+            pair_dict = obj_cat_pair_list[0]
+            obj_id_src = pair_dict['obj_id_src']
+            obj_id_tar = pair_dict['obj_id_tar']
+            obj_info_src = pair_dict['obj_info_src']
+            obj_info_tar = pair_dict['obj_info_tar']
+            obj_info_cat = obj_info_src if obj_id_src < obj_id_tar else obj_info_tar
+            self.merge(obj_info_src, obj_info_tar, obj_info_cat)
+            del_index = locate(int(obj_id_src if obj_id_src > obj_id_tar else obj_id_tar))
+            obj_del = self.person_identity_history.pop(del_index)
+            # print('delete: {}'.format(obj_del.identity))
 
     def getInfoIterator(self, min_seconds):
         iterator_list = [(person, person.getInfoIterator()) for person in self.person_identity_history
@@ -423,10 +546,24 @@ class LibScaner:
         if video_info.isFixedNumber is False and len(video_info.person_identity_history) > 0:
             video_info.person_fixed_num = len(video_info.person_identity_history)
 
+    @staticmethod
+    def updateCommon2(index_frame, cache, video_info: VideoInfo):
+        person_list_new = []
+        for n in range(cache.number):
+            cur_one_box = cache.box[n, :]  # 4: lft,top,rig,bot
+            box_face_score = 1
+            if cache.score[n] < 0.5:
+                continue
+            # create a new person
+            person_new = video_info.createNewPerson(index_frame, cache.bgr, -1, cur_one_box, cur_one_box, box_face_score)
+            person_list_new.append(person_new)
+        # update current person list
+        video_info.updatePersonList(person_list_new)
+
     """
     """
     @staticmethod
-    def matchPrevious(person_list, identity):
+    def matchPreviousByIdentity(person_list, identity):
         for n, person in enumerate(person_list):
             assert isinstance(person, Person)
             if person.yolo_identity == identity:
@@ -435,7 +572,7 @@ class LibScaner:
 
     @staticmethod
     def realignFace(points, w, h, index):
-        template = np.array([[192, 239], [318, 240], [256, 314]], dtype=np.float32)
+        template = np.array([[197, 176], [402, 176], [302, 356]], dtype=np.float32)
         dst_pts = points[np.array(index, dtype=np.int32)]
         src_pts = template[:len(dst_pts), :]
         transform = skimage.transform.SimilarityTransform()
@@ -468,17 +605,17 @@ class LibScaner:
             if points[4, 0] < points[2, 0] < points[0, 0] < points[1, 0] < points[3, 0]:
                 bbox = BoundingBox(np.array([lft, top, rig, bot], dtype=np.int32)).toSquare().clip(0, 0, w-1, h-1).asInt()
                 if confidence[0] > threshold:
-                    return np.array(bbox, dtype=np.int32), np.sum(confidence[:5])  # 1 + np.mean(1-confidence[5:])
+                    return np.array(bbox, dtype=np.int32), confidence
                 else:
-                    return np.array(bbox, dtype=np.int32),  np.sum(confidence[:5])  # 4 + np.mean(1-confidence[5:])
+                    return np.array(bbox, dtype=np.int32), confidence
             else:
                 if confidence[1] > threshold and confidence[2] > threshold:
                     bbox = LibScaner.realignFace(points, w, h, index=[2, 1, 0])
-                    return np.array(bbox, dtype=np.int32),  np.sum(confidence[:5])  # 4 + np.mean(1 - confidence[5:])
+                    return np.array(bbox, dtype=np.int32), confidence
         if confidence[3] > threshold and confidence[1] > threshold:
             rig = points[3, 0]  # points[1, 0] < points[3, 0]
             if confidence[2] > threshold:
-                assert confidence[0] > threshold, confidence[0]
+                assert confidence[0] > 0, confidence[0]
                 if points[2, 0] < points[0, 0] < points[1, 0] < points[3, 0]:
                     rig_ratio = float(rig - points[1, 0]) / float(rig - points[0, 0])
                     lft = points[2, 0] - float(rig - points[0, 0]) * (1 - rig_ratio)
@@ -489,10 +626,10 @@ class LibScaner:
                     bbox = BoundingBox(np.array([lft, top, rig, bot], dtype=np.int32)).toSquare().clip(0, 0, w-1, h-1).asInt()
                 else:
                     bbox = LibScaner.realignFace(points, w, h, index=[2, 1, 0])
-                return np.array(bbox, dtype=np.int32),  np.sum(confidence[:5])  # 2 + np.mean(1-confidence[5:])
+                return np.array(bbox, dtype=np.int32),  confidence
             if confidence[0] > threshold:
                 if points[0, 0] < points[1, 0] < points[3, 0]:
-                    lft = points[0, 0] - abs(points[0, 0] - points[1, 0])  # min(lft, points[0, 0])
+                    lft = points[0, 0] - abs(points[0, 0] - points[1, 0])
                     lft, rig = min(lft, rig), max(lft, rig)
                     len_c2rig = abs(rig - points[0, 0])
                     top = int(max(points[0, 1] - 0.4 * len_c2rig, 0))
@@ -500,11 +637,11 @@ class LibScaner:
                     bbox = BoundingBox(np.array([lft, top, rig, bot], dtype=np.int32)).toSquare().clip(0, 0, w-1, h-1).asInt()
                 else:
                     bbox = LibScaner.realignFace(points, w, h, index=[1, 0])
-                return np.array(bbox, dtype=np.int32),  np.sum(confidence[:5])  # 3 + np.mean(1-confidence[5:])
+                return np.array(bbox, dtype=np.int32), confidence
         if confidence[4] > threshold and confidence[2] > threshold:
             lft = points[4, 0]
             if confidence[1] > threshold:
-                assert confidence[0] > threshold, confidence[0]
+                assert confidence[0] > 0, confidence[0]
                 if points[4, 0] < points[2, 0] < points[0, 0] < points[1, 0]:
                     lft_ratio = float(points[2, 0]-lft) / float(points[0, 0]-lft)
                     rig = points[1, 0] + float(points[0, 0] - lft) * (1 - lft_ratio)
@@ -515,7 +652,7 @@ class LibScaner:
                     bbox = BoundingBox(np.array([lft, top, rig, bot], dtype=np.int32)).toSquare().clip(0, 0, w-1, h-1).asInt()
                 else:
                     bbox = LibScaner.realignFace(points, w, h, index=[2, 1, 0])
-                return np.array(bbox, dtype=np.int32),  np.sum(confidence[:5])  # 2 + np.mean(1-confidence[5:])
+                return np.array(bbox, dtype=np.int32), confidence  # 2 + np.mean(1-confidence[5:])
             if confidence[0] > threshold:
                 if points[4, 0] < points[2, 0] < points[0, 0]:
                     rig = points[0, 0] + abs(points[2, 0] - points[0, 0])  # min(lft, points[0, 0])
@@ -526,8 +663,8 @@ class LibScaner:
                     bbox = BoundingBox(np.array([lft, top, rig, bot], dtype=np.int32)).toSquare().clip(0, 0, w-1, h-1).asInt()
                 else:
                     bbox = LibScaner.realignFace(points, w, h, index=[2, 0])
-                return np.array(bbox, dtype=np.int32), np.sum(confidence[:5])  # 3 + np.mean(1-confidence[5:])
-        return np.array([0, 0, 0, 0], dtype=np.int32),  np.sum(confidence[:5])  # 4 + np.mean(1-confidence[5:])
+                return np.array(bbox, dtype=np.int32), confidence
+        return np.array([0, 0, 0, 0], dtype=np.int32), confidence
 
     @staticmethod
     def hasOverlap(box, n):
@@ -542,8 +679,8 @@ class LibScaner:
         return False
 
     @staticmethod
-    def resetYOLOTracker():
-        XManager.getModules('ultralytics').resetTracker('yolo11m-pose')
+    def resetYOLOTracker(name):
+        XManager.getModules('ultralytics').resetTracker(name)
 
     @staticmethod
     def updateWithYOLO(index_frame, frame_bgr, cache_or_result, video_info: VideoInfo):
@@ -556,20 +693,18 @@ class LibScaner:
         number = len(result)
         # num_max = min(number, video_info.person_fixed_num) if video_info.isFixedNumber else number
         if number > 0 and result.boxes.id is not None:
-            # classify = np.reshape(np.round(result.boxes.cls.cpu().numpy()).astype(np.int32), (-1,))
-            # boxes = np.reshape(np.round(result.boxes.xyxy.cpu().numpy()).astype(np.int32), (-1, 4,))
-            # points = np.reshape(result.keypoints.data.cpu().numpy().astype(np.float32), (-1, 17, 3))
-            # scores = np.reshape(result.boxes.conf.cpu().numpy().astype(np.float32), (-1,))
-            # identity = np.reshape(result.boxes.id.cpu().numpy().astype(np.int32), (-1,))
-            classify, scores, identity, boxes, points = YOLOResult.refineByNMS(result, [])
+            classify = np.reshape(np.round(result.boxes.cls.cpu().numpy()).astype(np.int32), (-1,))
+            boxes = np.reshape(np.round(result.boxes.xyxy.cpu().numpy()).astype(np.int32), (-1, 4,))
+            points = np.reshape(result.keypoints.data.cpu().numpy().astype(np.float32), (-1, 17, 3))
+            scores = np.reshape(result.boxes.conf.cpu().numpy().astype(np.float32), (-1,))
+            identity = np.reshape(result.boxes.id.cpu().numpy().astype(np.int32), (-1,))
+            # classify, scores, identity, boxes, points = YOLOResult.refineByNMS(result, [])
             # update common(tracking without lose)
             index_list = np.argsort(scores)[::-1].tolist()
             for i, n in enumerate(index_list):
                 cur_one_box_tracker = boxes[n, :]  # 4: lft,top,rig,bot
-                # l,t,r,b = box[n]
                 cur_one_box_face, box_face_score = LibScaner.transformPoints2FaceBox(frame_bgr, points[n, :, :], cur_one_box_tracker)
-                # box_face_score = box_face_score if LibScaner.hasOverlap(box, n) is False and number == video_info.person_fixed_num else 0
-                index = LibScaner.matchPrevious(video_info.person_list_current, int(identity[n]))
+                index = LibScaner.matchPreviousByIdentity(video_info.person_list_current, int(identity[n]))
                 if classify[n] != 0:
                     index_list.remove(n)
                     continue  # only person id needed
@@ -584,7 +719,6 @@ class LibScaner:
             for i, n in enumerate(index_list):
                 cur_one_box_tracker = boxes[n, :]  # 4: lft,top,rig,bot
                 cur_one_box_face, box_face_score = LibScaner.transformPoints2FaceBox(frame_bgr, points[n, :, :], cur_one_box_tracker)
-                # box_face_score = box_face_score if LibScaner.hasOverlap(box, n) is False and number == video_info.person_fixed_num else 0
                 iou_max_idx, iou_max_val, dis_min_idx, dis_min_val = LibScaner.findBestMatch(video_info.person_list_current, cur_one_box_tracker)
                 if iou_max_idx != -1 and (iou_max_val > LibScaner.IOU_Threshold or video_info.isFixedNumber):
                     person_cur = video_info.person_list_current.pop(iou_max_idx)
@@ -615,6 +749,138 @@ class LibScaner:
         #     video_info.person_fixed_num = len(video_info.person_identity_history)
 
     @staticmethod
+    def findByFaceBox(person_list, frame_index, cur_face_box):
+        for person in person_list:
+            frame_info = person.getLastInfo()
+            if frame_info.index_frame == frame_index:
+                iou = BoundingBox.computeIOU(np.reshape(frame_info.box_face, (1, 4)), np.reshape(cur_face_box, (1, 4)))
+                if float(iou) > 0.5:
+                    return True  # TODO: iou value
+        return False
+
+    @staticmethod
+    def updateWithYOLO2(frame_index, frame_bgr, result, video_info: VideoInfo):
+        person_list_new = []
+        number = len(result)
+        if number > 0 and result.boxes.id is not None:
+            classify = np.reshape(np.round(result.boxes.cls.cpu().numpy()).astype(np.int32), (-1,))
+            scores = np.reshape(result.boxes.conf.cpu().numpy().astype(np.float32), (-1,))
+            identity = np.reshape(result.boxes.id.cpu().numpy().astype(np.int32), (-1,))
+            boxes = np.reshape(np.round(result.boxes.xyxy.cpu().numpy()).astype(np.int32), (-1, 4,))
+            points = np.reshape(result.keypoints.data.cpu().numpy().astype(np.float32), (-1, 17, 3))
+            # update common(tracking without lose)
+            index_list = np.argsort(scores)[::-1].tolist()
+            for i, n in enumerate(index_list):
+                if classify[n] != 0:
+                    continue  # only person id needed
+                cur_one_box_tracker = boxes[n, :]  # 4: lft,top,rig,bot
+                cur_one_box_face, cur_one_points_score = LibScaner.transformPoints2FaceBox(frame_bgr, points[n, :, :], cur_one_box_tracker)
+                if LibScaner.findByFaceBox(person_list_new, frame_index, cur_one_box_face):
+                    continue
+                index1 = LibScaner.matchPreviousByIdentity(video_info.person_list_current, int(identity[n]))
+                if index1 != -1:
+                    person_cur = video_info.person_list_current.pop(index1)
+                    assert isinstance(person_cur, Person)
+                    person_cur.appendInfo(frame_index, frame_bgr, cur_one_box_tracker, cur_one_box_face, cur_one_points_score)
+                    person_list_new.append(person_cur)
+                    continue
+                index2 = LibScaner.matchPreviousByIdentity(video_info.person_identity_history, int(identity[n]))
+                if index2 != -1:
+                    person_cur = video_info.person_identity_history.pop(index2)
+                    assert isinstance(person_cur, Person)
+                    person_cur.appendInfo(frame_index, frame_bgr, cur_one_box_tracker, cur_one_box_face, cur_one_points_score)
+                    person_list_new.append(person_cur)
+                    continue
+                # create new person
+                if np.sum(cur_one_box_face) > 0:
+                    # create a new person
+                    person_new = video_info.createNewPerson(
+                        frame_index, frame_bgr, int(identity[n]), cur_one_box_tracker, cur_one_box_face, cur_one_points_score)
+                    if person_new is not None:
+                        person_list_new.append(person_new)
+                else:
+                    # skip the unreliable face box
+                    pass
+        # update current person list
+        video_info.updatePersonList(person_list_new)
+
+    @staticmethod
+    def findBestMatchOfFaceBox(frame_index, person_list, cur_one_box_face):
+        iou_max_val = 0.
+        iou_max_idx = -1
+        for n, person in enumerate(person_list):
+            assert isinstance(person, Person)
+            frame_info = person.getLastInfo()
+            if frame_index == frame_info.index_frame+1:
+                iou = BoundingBox.computeIOU(np.reshape(frame_info.box_face, (1, 4)), np.reshape(cur_one_box_face, (1, 4)))
+                if iou > iou_max_val:
+                    iou_max_val = iou
+                    iou_max_idx = n
+        return iou_max_idx, iou_max_val
+
+    @staticmethod
+    def updateWithYOLO3(frame_index, frame_bgr, result, video_info: VideoInfo):
+        person_list_new = []
+        number = len(result)
+        if number > 0 and result.boxes.id is not None:
+            classify = np.reshape(np.round(result.boxes.cls.cpu().numpy()).astype(np.int32), (-1,))
+            scores = np.reshape(result.boxes.conf.cpu().numpy().astype(np.float32), (-1,))
+            identity = np.reshape(result.boxes.id.cpu().numpy().astype(np.int32), (-1,))
+            boxes = np.reshape(np.round(result.boxes.xyxy.cpu().numpy()).astype(np.int32), (-1, 4,))
+            points = np.reshape(result.keypoints.data.cpu().numpy().astype(np.float32), (-1, 17, 3))
+            # update common(tracking without lose)
+            index_list = np.argsort(scores)[::-1].tolist()
+            for i, n in enumerate(index_list):
+                if classify[n] != 0:
+                    continue  # only person id needed
+                cur_one_box_tracker = boxes[n, :]  # 4: lft,top,rig,bot
+                cur_one_box_face, cur_one_points_score = LibScaner.transformPoints2FaceBox(frame_bgr, points[n, :, :], cur_one_box_tracker)
+                if LibScaner.findByFaceBox(person_list_new, frame_index, cur_one_box_face):
+                    continue
+                #
+                index1, iou1 = LibScaner.findBestMatchOfFaceBox(frame_index, video_info.person_list_current, cur_one_box_face)
+                if index1 != -1 and iou1 > 0.5:
+                    person_cur = video_info.person_list_current.pop(index1)
+                    assert isinstance(person_cur, Person)
+                    person_cur.appendInfo(frame_index, frame_bgr, cur_one_box_tracker, cur_one_box_face, cur_one_points_score)
+                    person_list_new.append(person_cur)
+                    continue
+                index2, iou2 = LibScaner.findBestMatchOfFaceBox(frame_index, video_info.person_identity_history, cur_one_box_face)
+                if index2 != -1 and iou2 > 0.5:
+                    person_cur = video_info.person_identity_history.pop(index2)
+                    assert isinstance(person_cur, Person)
+                    person_cur.appendInfo(frame_index, frame_bgr, cur_one_box_tracker, cur_one_box_face, cur_one_points_score)
+                    person_list_new.append(person_cur)
+                    continue
+                #
+                index3 = LibScaner.matchPreviousByIdentity(video_info.person_list_current, int(identity[n]))
+                if index3 != -1:
+                    person_cur = video_info.person_list_current.pop(index3)
+                    assert isinstance(person_cur, Person)
+                    person_cur.appendInfo(frame_index, frame_bgr, cur_one_box_tracker, cur_one_box_face, cur_one_points_score)
+                    person_list_new.append(person_cur)
+                    continue
+                index4 = LibScaner.matchPreviousByIdentity(video_info.person_identity_history, int(identity[n]))
+                if index4 != -1:
+                    person_cur = video_info.person_identity_history.pop(index4)
+                    assert isinstance(person_cur, Person)
+                    person_cur.appendInfo(frame_index, frame_bgr, cur_one_box_tracker, cur_one_box_face, cur_one_points_score)
+                    person_list_new.append(person_cur)
+                    continue
+                # create new person
+                if np.sum(cur_one_box_face) > 0:
+                    # create a new person
+                    person_new = video_info.createNewPerson(
+                        frame_index, frame_bgr, int(identity[n]), cur_one_box_tracker, cur_one_box_face, cur_one_points_score)
+                    if person_new is not None:
+                        person_list_new.append(person_new)
+                else:
+                    # skip the unreliable face box
+                    pass
+        # update current person list
+        video_info.updatePersonList(person_list_new)
+
+    @staticmethod
     def inferenceOnVideo(reader_iterator, **kwargs) -> VideoInfo:
         with XContextTimer(True) as context:
             with tqdm.tqdm(total=len(reader_iterator)) as bar:
@@ -629,7 +895,7 @@ class LibScaner:
                         LibScaner.updateWithYOLO(n, cache.bgr, cache, video_info)
                     bar.update(1)
                     schedule_call('扫描视频-运行中', float((n+1)/len(reader_iterator)))
-                LibScaner.resetYOLOTracker()
+                LibScaner.resetYOLOTracker('yolo11m-pose')
                 video_info.updatePersonList([])  # end the update
                 if 'path_out_json' in kwargs and isinstance(kwargs['path_out_json'], str):
                     schedule_call('扫描视频-后处理', None)
@@ -639,41 +905,44 @@ class LibScaner:
     @staticmethod
     def inferenceOnVideo2(path_in_video, **kwargs) -> VideoInfo:
         with XContextTimer(True) as context:
-            parameters = dict(persist=True, conf=0.4, iou=0.6, classes=[0], tracker='bytetrack.yaml', verbose=False)
-            module = XManager.getModules('ultralytics')['yolo11m-pose']
+            parameters = dict(persist=True, conf=0.5, iou=0.7, classes=[0], tracker='bytetrack.yaml', verbose=False)
+            module = XManager.getModules('ultralytics')['yolo11x-pose']
             results = module.track(path_in_video, **parameters)
             fixed_num = 0
             for n in range(len(results)):
                 result = results[n]
                 number = len(result)
                 if number > 0 and result.boxes.id is not None:
-                    result_refine = YOLOResult.refineByNMS(result, [])
-                    number = len(result_refine[0])
+                    # result_refine = YOLOResult.refineByNMS(result, [])
+                    # number = len(result_refine[0])
                     fixed_num = max(fixed_num, number)
 
             schedule_call = kwargs.pop('schedule_call', lambda *_args, **_kwargs: None)
-            video_info = VideoInfo(fixed_num=fixed_num)
+            video_info = VideoInfo(fixed_num=-1)
             reader = XVideoReader(path_in_video)
             for n in range(len(results)):
                 ret, bgr = reader.read()
                 if ret is True:
-                    LibScaner.updateWithYOLO(n, bgr, results[n], video_info)
+                    LibScaner.  updateWithYOLO3(n, bgr, results[n], video_info)
                 schedule_call('扫描视频-运行中', float((n + 1) / len(results)))
-            LibScaner.resetYOLOTracker()
+            LibScaner.resetYOLOTracker('yolo11x-pose')
             video_info.updatePersonList([])  # end the update
+            # print('merge before:', len(video_info.person_identity_history))
+            video_info.mergeIdentity()
+            # print('merge after:', len(video_info.person_identity_history))
             if 'path_out_json' in kwargs and isinstance(kwargs['path_out_json'], str):
                 schedule_call('扫描视频-后处理', None)
                 video_info.dumpInfoToJson(kwargs['path_out_json'])
             return video_info
 
     @staticmethod
-    def inferenceOnImage(source, **kwargs):
+    def inferenceOnImage(bgr, **kwargs):
         with XContextTimer(True) as context:
-            cache = LibScaner.packageAsCache(source)
+            cache = XPortrait(bgr, rotations=[0, 90, 180, 270])
             video_info = VideoInfo(fixed_num=-1)
             schedule_call = kwargs.pop('schedule_call', lambda *_args, **_kwargs: None)
             schedule_call('扫描图片-运行中', None)
-            LibScaner.updateCommon(0, cache, video_info)
+            LibScaner.updateCommon2(0, cache, video_info)
             video_info.updatePersonList([])  # end the update
             if 'path_out_json' in kwargs and isinstance(kwargs['path_out_json'], str):
                 schedule_call('扫描图片-后处理', None)

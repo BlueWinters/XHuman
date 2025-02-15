@@ -7,6 +7,7 @@ import json
 import pickle
 import skimage
 from ...base import XCache
+from ...utils import Colors
 
 
 class XBody(XCache):
@@ -144,14 +145,25 @@ class XBody(XCache):
         if 'ultralytics' in self.backend:
             name = self.backend.split('.')[1]  # example: 'ultralytics.yolo11n-pose' ==> ultralytics.{LibUltralyticsWrapper.ModelList[n]}
             module = self._getModule('ultralytics')[name]
-            result = module(bgr, verbose=False)[0]
+            result = module(bgr, classes=[0], verbose=False)[0]
             self._number = len(result)
             self._score = np.reshape(result.boxes.conf.cpu().numpy().astype(np.float32), (-1,))
             self._box = np.reshape(np.round(result.boxes.xyxy.cpu().numpy()).astype(np.int32), (-1, 4,))
-            if 'pose' in self.backend:
+            self._points17 = None
+            self._scores17 = None
+            self._instances_mask = None
+            # assign the property
+            if result.keypoints is not None:
                 points17 = np.reshape(result.keypoints.data.cpu().numpy().astype(np.float32), (-1, 17, 3))
                 self._points17 = np.reshape(points17[:, :, :2], (-1, 17, 2))
                 self._scores17 = np.reshape(points17[:, :, 2], (-1, 17))
+            if result.masks is not None:
+                h, w = self.shape
+                self._instances_mask = np.zeros(shape=(self._number, h, w), dtype=np.uint8)
+                if len(result) > 0:
+                    masks = np.round(result.masks.cpu().numpy().data * 255).astype(np.uint8)  # note: C,H,W and [0,1]
+                    for n in range(self._number):
+                        self._instances_mask[n, :, :] = cv2.resize(masks[n, :, :], (w, h))
 
     @property
     def number(self):
@@ -218,6 +230,17 @@ class XBody(XCache):
             module = self._getModule('rtmpose')
             self._visual_boxes = module.visualBoxes(np.copy(self.bgr), self.box)
         return self._visual_boxes
+
+    @property
+    def visual_instances(self):
+        if not hasattr(self, '_visual_instances'):
+            self.backend = 'ultralytics.yolo11m-seg'
+            self._detectBoxes(self.bgr)
+            self._visual_instances = np.copy(self.bgr)
+            for n in range(len(self._instances_mask)):
+                mask = self._instances_mask[n, :, :]
+                self._visual_instances[mask > 0] = self._visual_instances[mask > 0] / 255 * Colors.getColor(n, bgr=True)
+        return self._visual_instances
 
     """
     """

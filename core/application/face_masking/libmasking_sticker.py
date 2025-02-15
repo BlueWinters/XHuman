@@ -6,7 +6,7 @@ import skimage
 import numpy as np
 import tqdm
 from .boundingbox import BoundingBox
-from ...base import XPortrait
+from ...base import XPortrait, XPortraitHelper
 from ...utils.context import XContextTimer
 from ...utils.video import XVideoReader, XVideoWriter
 from ...utils.resource import Resource
@@ -126,11 +126,11 @@ class LibMasking_Sticker:
                 rig = int(min(w, rig + ww * ratio))
                 bot = int(min(h, bot + hh * ratio))
                 part = bgr[top:bot, lft:rig, :]
-                cache = XPortrait(part)
+                cache = XPortrait(part, rotations=[0, 90, 180, 270])
                 points_sticker = np.array(sticker['eyes_center'], dtype=np.float32)
                 try:
                     n = LibMasking_Sticker.getIndexByBox(cache, box)  # default is 0
-                    points_source = cache.points[n, :2]
+                    points_source = XPortraitHelper.getCenterOfEachEyes(cache)[n]  # cache.points[n, :2]
                     points_source[:, 0] += lft
                     points_source[:, 1] += top
                     matrix = cv2.estimateAffinePartial2D(points_sticker, points_source, method=cv2.LMEDS)[0]
@@ -154,7 +154,7 @@ class LibMasking_Sticker:
                 rig = int(min(w, rig + ww * ratio))
                 bot = int(min(h, bot + hh * ratio))
                 part = bgr[top:bot, lft:rig, :]
-                cache = XPortrait(part)
+                cache = XPortrait(part, rotations=[0, 90, 180, 270])
                 points_sticker = np.array(sticker['eyes_center_fix'], dtype=np.float32)
                 try:
                     n = LibMasking_Sticker.getIndexByBox(cache, box)  # default is 0
