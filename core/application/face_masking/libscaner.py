@@ -552,7 +552,7 @@ class LibScaner:
         for n in range(cache.number):
             cur_one_box = cache.box[n, :]  # 4: lft,top,rig,bot
             box_face_score = 1
-            if cache.score[n] < 0.5:
+            if cache.score[n] < 0.7:
                 continue
             # create a new person
             person_new = video_info.createNewPerson(index_frame, cache.bgr, -1, cur_one_box, cur_one_box, box_face_score)

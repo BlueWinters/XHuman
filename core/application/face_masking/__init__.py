@@ -1,7 +1,7 @@
 
 import logging
 
-__version__ = '0.3.1'
+__version__ = '0.3.2'
 logging.error('face_masking version: {}'.format(__version__))
 
 """
@@ -50,5 +50,7 @@ version - 0.2.14
     note: 2025-02-12, fix bug of crash
 version - 0.3.1
     note: 2025-02.15, fix bugs
+version - 0.3.2
+    note: 2025-02.16, update mosaic polygon method
 """
 

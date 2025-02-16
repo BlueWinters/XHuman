@@ -75,7 +75,7 @@ class LibUltralyticsWrapper:
             angles = np.concatenate(angles_collect, axis=0)
             points = np.concatenate(points_collect, axis=0) if 'pose' in name else None
             masks = np.concatenate(masks_collect, axis=0) if 'seg' in name else None
-            keep = self.doNonMaximumSuppression(scores, boxes, 0.4)
+            keep = self.doNonMaximumSuppression(scores, boxes, 0.6)
             scores = scores[keep]
             boxes = boxes[keep]
             points = points[keep] if 'pose' in name else None

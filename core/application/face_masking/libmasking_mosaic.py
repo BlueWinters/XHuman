@@ -5,6 +5,8 @@ import cv2
 import numpy as np
 import tqdm
 from skimage import segmentation
+from scipy.spatial import Voronoi
+from shapely.geometry import Polygon
 from .boundingbox import Rectangle, BoundingBox
 from .helper.image_helper import MaskingHelper
 from ...base.cache import XPortrait, XPortraitHelper
@@ -130,6 +132,47 @@ class LibMasking_Mosaic:
         return segments, n_segments
 
     @staticmethod
+    def generateVoronoiPentagons(h, w, cell_size, seed=None):
+        # 随机生成点，作为五边形的中心
+        np.random.seed(seed)
+        step = cell_size // 2
+        # 1.source method
+        # points = []
+        # for x in range(0, w, cell_size):
+        #     for y in range(0, h, cell_size):
+        #         jitter_x = np.random.randint(-step, step)*0
+        #         jitter_y = np.random.randint(-step, step)*0
+        #         points.append([x + step + jitter_x, y + step + jitter_y])
+        # 2.fast method
+        x = np.arange(0, h, cell_size) + step
+        y = np.arange(0, w, cell_size) + step
+        xv, yv = np.meshgrid(x, y)
+        points = np.stack([np.reshape(xv, (-1,)), np.reshape(yv, (-1,))], axis=1)
+        points = points + np.random.randint(-step, step, size=(len(points), 2))
+        # 使用 Voronoi 图生成区域
+        vor = Voronoi(points)
+        polygons = []
+        for region_idx in vor.point_region:
+            region = vor.regions[region_idx]
+            if -1 not in region:  # 忽略无限区域
+                polygon = [vor.vertices[i] for i in region]
+                polygons.append(Polygon(polygon))
+        return polygons
+
+    @staticmethod
+    def doSegmentationWithVoronoi(bgr, n_div=32, **kwargs):
+        h, w, c = bgr.shape
+        cell_size = int((h + w) / n_div / 2)
+        polygons = LibMasking_Mosaic.generateVoronoiPentagons(
+            h + 2 * cell_size + 2, w + 2 * cell_size + 2, cell_size)
+        canvas = np.zeros((h + 2 * cell_size + 2, w + 2 * cell_size + 2), dtype=np.int32)
+        for n, poly in enumerate(polygons):
+            points = np.array(poly.exterior.coords, dtype=np.int32)
+            cv2.fillPoly(canvas, [points], n + 1)
+        mask = canvas[cell_size + 1:-cell_size - 1, cell_size + 1:-cell_size - 1]
+        return mask, None
+
+    @staticmethod
     def visualAsMean(label_field, bgr, bg_label=0, bg_color=(255, 255, 255)):
         out = np.zeros(label_field.shape + (3,), dtype=bgr.dtype)
         labels = np.unique(label_field)
@@ -162,7 +205,7 @@ class LibMasking_Mosaic:
     def doWithMosaicPolygon(bgr, vis_boundary, **kwargs):
         super_pixels = kwargs.pop('super_pixels', None)
         super_pixels = super_pixels if super_pixels is not None \
-            else LibMasking_Mosaic.doSuperPixel(bgr, **kwargs)[0]
+            else LibMasking_Mosaic.doSegmentationWithVoronoi(bgr, **kwargs)[0]
         new_bgr = LibMasking_Mosaic.doPostprocess(bgr, super_pixels, vis_boundary)
         return new_bgr, super_pixels
 
