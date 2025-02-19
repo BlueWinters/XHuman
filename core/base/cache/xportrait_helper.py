@@ -48,7 +48,7 @@ class XPortraitHelper:
         return np.stack(center_each_eyes_list, axis=0)  # N,2,2
 
     @staticmethod
-    def getFaceRegion(cache, index=None, top_line='brow', value=255):
+    def getFaceRegionByLandmark(h, w, landmark, top_line='brow', value=255):
         def getTopLinePoints(points):
             if top_line == 'brow':
                 pts_rig = points[22:27, :][::-1, :]
@@ -68,17 +68,23 @@ class XPortraitHelper:
                 return pts_rig, pts_lft
             raise NotImplementedError(top_line)
 
+        assert landmark.shape[0] == 68 and landmark.shape[1] == 2, landmark.shape
+        points_rig, points_lft = getTopLinePoints(landmark)
+        points_profile = landmark[0:17, :]
+        points_all = np.concatenate([points_profile, points_rig, points_lft], axis=0).round().astype(np.int32)
+        mask_face = np.zeros(shape=(h, w), dtype=np.uint8)
+        cv2.fillPoly(mask_face, [points_all], (value, value, value))
+        return mask_face
+
+    @staticmethod
+    def getFaceRegion(cache, index=None, top_line='brow', value=255):
         assert isinstance(cache, XPortrait), type(cache)
         mask_list = []
         index_list = [index] if isinstance(index, int) else list(range(cache.number))
+        h, w = cache.shape
         for n in index_list:
             landmark = cache.landmark[n]
-            points_rig, points_lft = getTopLinePoints(landmark)
-            points_profile = landmark[0:17, :]
-            points_all = np.concatenate([points_profile, points_rig, points_lft], axis=0).round().astype(np.int32)
-            mask_face = np.zeros(cache.shape, dtype=np.uint8)
-            cv2.fillPoly(mask_face, [points_all], (value, value, value))
-            mask_list.append(mask_face)
+            mask_list.append(XPortraitHelper.getFaceRegionByLandmark(h, w, landmark, top_line, value))
         return mask_list
 
     """
