@@ -326,7 +326,7 @@ class InfoVideo:
     def __init__(self, **kwargs):
         self.person_identity_seq = 0
         self.person_identity_history = []
-        self.person_fixed_num = -1
+        self.person_num_max = kwargs.pop('person_num_max', -1)
         # save every frame info
         self.frame_info_list = []
         # current identity list
@@ -335,10 +335,6 @@ class InfoVideo:
         self.yolo_model = 'yolo11x-pose'
         self.tracking_config = dict(
             persist=True, conf=0.5, iou=0.7, classes=[0], tracker='bytetrack.yaml', verbose=False)
-
-    @property
-    def isFixedNumber(self):
-        return bool(self.person_fixed_num != -1)
 
     """
     """
@@ -471,14 +467,15 @@ class InfoVideo:
 
     @staticmethod
     def realignFace(points, w, h, index):
-        template = np.array([[197, 176], [402, 176], [302, 356]], dtype=np.float32)
+        # template = np.array([[197, 176], [402, 176], [302, 356]], dtype=np.float32)
+        template = np.array([[155, 88], [360, 91], [256, 213]], dtype=np.float32)
         dst_pts = points[np.array(index, dtype=np.int32)]
         src_pts = template[:len(dst_pts), :]
         transform = skimage.transform.SimilarityTransform()
         transform.estimate(src_pts, dst_pts)
         box = np.array([[0, 0, 1], [512, 0, 1], [512, 512, 1], [0, 512, 1]], dtype=np.float32)
         box_remap = np.dot(transform.params, box.T)[:2, :].T
-        box_remap_int = box_remap.astype(np.int32)
+        box_remap_int = np.round(box_remap).astype(np.int32)
         lft = np.min(box_remap_int[:, 0])
         rig = np.max(box_remap_int[:, 0])
         top = np.min(box_remap_int[:, 1])
@@ -502,12 +499,16 @@ class InfoVideo:
         return person
 
     @staticmethod
-    def transformPoints2FaceBox(bgr, key_points, box, threshold=0.5):
+    def transformPoints2FaceBox2(bgr, key_points, box, threshold=0.5):
         h, w, c = bgr.shape
         points_xy = key_points[:, :2].astype(np.float32)
         points_score = key_points[:, 2].astype(np.float32)
         if points_score[0] > threshold and points_score[1] > threshold and points_score[2] > threshold:
             bbox = InfoVideo.realignFace(points_xy, w, h, index=[2, 1, 0])
+            # canvas = np.copy(bgr)
+            # canvas = ScanningVisor.visualSinglePerson(canvas, 0, box, bbox_rot)
+            # canvas = ScanningVisor.visualSinglePerson(canvas, 1, box, bbox)
+            # cv2.imwrite(R'X:\project\xhuman\core\application\face_masking2\document\video\scale_common\canvas.png', canvas)
             return np.array(bbox, dtype=np.int32), None
         if points_score[1] > threshold and points_score[2] > threshold:
             bbox = InfoVideo.realignFace(points_xy, w, h, index=[2, 1])
@@ -515,7 +516,7 @@ class InfoVideo:
         return np.array([0, 0, 0, 0], dtype=np.int32), None
 
     @staticmethod
-    def transformPoints2FaceBox2(bgr, key_points, box, threshold=0.5):
+    def transformPoints2FaceBox(bgr, key_points, box, threshold=0.5):
         h, w, c = bgr.shape
         confidence = key_points[:, 2].astype(np.float32)
         points = key_points[:, :2].astype(np.float32)
@@ -654,6 +655,8 @@ class InfoVideo:
             obj_cur_preview = obj_info_cur.preview
             assert isinstance(obj_pre_preview, InfoVideo_PersonPreview)
             assert isinstance(obj_cur_preview, InfoVideo_PersonPreview)
+            # valid_face_pre = obj_pre_preview.isValid()
+            # valid_face_cur = obj_cur_preview.isValid()
             valid_face_pre = bool(obj_pre_preview.face_valid_points_num >= 4 and obj_pre_preview.face_size > face_size_min)
             valid_face_cur = bool(obj_cur_preview.face_valid_points_num >= 4 and obj_cur_preview.face_size > face_size_min)
             # print('check: id-{}({}), id-{}({})'.format(obj_info_pre.identity, valid_face_pre, obj_info_cur.identity, valid_face_cur))

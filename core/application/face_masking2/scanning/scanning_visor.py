@@ -25,10 +25,17 @@ class ScanningVisor:
         point2 = np.array([box_tracker[2], box_tracker[3]], dtype=np.int32)
         canvas = cv2.rectangle(canvas, point1, point2, color, 2)
         if isinstance(box_face, np.ndarray) and len(box_face) == 4:
-            box_face = np.array(box_face).astype(np.int32)
-            point1_face = np.array([box_face[0], box_face[1]], dtype=np.int32)
-            point2_face = np.array([box_face[2], box_face[3]], dtype=np.int32)
-            canvas = cv2.rectangle(canvas, point1_face, point2_face, color, 1)
+            if len(box_face.shape) == 1:
+                box_face = np.array(box_face).astype(np.int32)
+                point1_face = np.array([box_face[0], box_face[1]], dtype=np.int32)
+                point2_face = np.array([box_face[2], box_face[3]], dtype=np.int32)
+                canvas = cv2.rectangle(canvas, point1_face, point2_face, color, 1)
+            if len(box_face.shape) == 2 and box_face.shape[1] == 2:
+                box_face = np.array(box_face).astype(np.int32)
+                cv2.line(canvas, box_face[0], box_face[1], color, 1)
+                cv2.line(canvas, box_face[1], box_face[2], color, 1)
+                cv2.line(canvas, box_face[2], box_face[3], color, 1)
+                cv2.line(canvas, box_face[3], box_face[0], color, 1)
         label = str(identity)
         box_width, box_height = cv2.getTextSize(label, 0, fontScale=text_size, thickness=text_th)[0]
         outside = point1[1] - box_height - 3 >= 0  # label fits outside box
