@@ -25,7 +25,6 @@ GlobalModuleDictClass['function'] = LibFunction
 GlobalModuleDictClass['portrait_light'] = LibPortraitLight
 GlobalModuleDictClass['portrait_beauty'] = LibPortraitBeauty
 GlobalModuleDictClass['face_masking'] = LibMasking
-GlobalModuleDictClass['face_masking2'] = LibMasking2
 
 # third party
 GlobalModuleDictClass['insightface'] = LibInsightFace
