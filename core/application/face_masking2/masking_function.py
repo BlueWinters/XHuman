@@ -77,9 +77,9 @@ class MaskingFunction:
         301: MaskingStickerAlignPoints.parameterize(),
         302: MaskingStickerAlignBoxStatic.parameterize(),
         303: MaskingStickerAlignBoxDynamic.parameterize(),
-        311: MaskingStickerAlignPoints.parameterize(resource=('eyes_center_affine', '01')),
-        312: MaskingStickerAlignPoints.parameterize(resource=('eyes_center_similarity', '01')),
-        313: MaskingStickerAlignPoints.parameterize(resource=('eyes_center_affine', '31')),
+        # 311: MaskingStickerAlignPoints.parameterize(resource=('eyes_center_affine', '01')),
+        # 312: MaskingStickerAlignPoints.parameterize(resource=('eyes_center_similarity', '01')),
+        # 313: MaskingStickerAlignPoints.parameterize(resource=('eyes_center_affine', '31')),
     }
 
     @staticmethod
@@ -96,11 +96,11 @@ class MaskingFunction:
     @staticmethod
     def getMaskingOptionDict(option_code_list, person_identity_list):
         options_dict = dict()
-        for code, person in zip(option_code_list, person_identity_list):
+        for code, person_identity in zip(option_code_list, person_identity_list):
             if code in MaskingFunction.MaskingOptionDict:
                 option_object = MaskingFunction.MaskingOptionDict[code]()
-                options_dict[person.identity] = option_object
-                logging.info('{}, {}'.format(str(person), str(option_object)))
+                options_dict[person_identity] = option_object
+                logging.info('identity-{}, {}'.format(str(person_identity), str(option_object)))
         return options_dict
 
     """
