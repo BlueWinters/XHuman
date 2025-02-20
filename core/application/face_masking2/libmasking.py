@@ -6,6 +6,17 @@ from .masking_function import MaskingFunction
 
 class LibMasking:
     """
+    """
+    def __init__(self, *args, **kwargs):
+        pass
+
+    def __del__(self):
+        pass
+
+    def initialize(self, *args, **kwargs):
+        pass
+
+    """
     just interface for api
     """
     @staticmethod
