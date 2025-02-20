@@ -38,11 +38,11 @@ class MaskingVideoWorker(XVideoMThreadWorker):
                         masking_option = self.options_dict[person.identity]
                         mask_info = MaskingHelper.getPortraitMaskingWithInfoVideo(
                             frame_index, frame_bgr, person, info, self.options_dict, with_hair=self.with_hair)
-                        frame_bgr = MaskingFunction.maskingVideoFace(
+                        canvas_bgr = MaskingFunction.maskingVideoFace(
                             frame_bgr, canvas_bgr, info, masking_option, mask_info=mask_info)
                     cursor.next()
             self.worker_lock(self.num_seq, 1)
-            self.result_list.append((frame_index, frame_bgr))
+            self.result_list.append((frame_index, canvas_bgr))
             frame_index += 1
             if self.verbose is True:
                 self.worker_lock.info('{:<4d}: {:<4d}({:<4d},{:<4d})'.format(self.num_seq, n, self.index_beg, self.index_end))

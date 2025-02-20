@@ -44,9 +44,9 @@ class LibMaskingImage:
                 assert isinstance(info_person, InfoImage_Person)
                 if info_person.identity in options_dict:
                     masking_option = options_dict[info_person.identity]
-                    bgr = MaskingFunction.maskingImageFace(bgr, canvas_bgr, info_person, masking_option)
+                    canvas_bgr = MaskingFunction.maskingImageFace(bgr, canvas_bgr, info_person, masking_option)
                     schedule_call('打码图片', float((n + 1) / len(info_image)))
-            return bgr
+            return canvas_bgr
 
 
 

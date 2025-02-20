@@ -58,10 +58,10 @@ class LibMaskingVideo:
                                 masking_option = options_dict[person.identity]
                                 mask_info = MaskingHelper.getPortraitMaskingWithInfoVideo(
                                     frame_index, frame_bgr, person, info, options_dict, with_hair=with_hair)
-                                frame_bgr = MaskingFunction.maskingVideoFace(
+                                canvas_bgr = MaskingFunction.maskingVideoFace(
                                     frame_bgr, canvas_bgr, info, masking_option, mask_info=mask_info)
                             cursor.next()
-                    writer.write(frame_bgr)
+                    writer.write(canvas_bgr)
                     bar.update(1)
                 # reformat
                 writer.release(reformat=True)
