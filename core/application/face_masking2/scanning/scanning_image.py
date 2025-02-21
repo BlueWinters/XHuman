@@ -118,6 +118,9 @@ class InfoImage:
             schedule_call('扫描图片-后处理', None)
             open(path_out_json, 'w').write(self.formatAsJson())
 
+    def getInfoJson(self, *args, **kwargs) -> str:
+        return self.formatAsJson()
+
     """
     """
     @staticmethod

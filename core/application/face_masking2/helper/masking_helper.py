@@ -142,7 +142,7 @@ class MaskingHelper:
             if option_dict[person.identity].NameEN.startswith('sticker'):
                 return None
             if np.sum(frame_info.box_face) == 0:
-                print('skip --> frame_index-{}, person_identity-{}, person_face_box-{}'.format(
+                logging.warning('skip --> frame_index-{}, person_identity-{}, person_face_box-{}'.format(
                     frame_index, person.identity, frame_info.box_face))
                 return None  # invalid face box
             lft, top, rig, bot = Rectangle(frame_info.box_face).expand(expand, expand).clip(0, 0, w, h).asInt()

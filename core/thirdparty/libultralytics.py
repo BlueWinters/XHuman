@@ -59,7 +59,8 @@ class LibUltralyticsWrapper:
         detect_kwargs = kwargs.pop('detect_kwargs', dict(classes=[0]))
         assert isinstance(detect_kwargs, dict), detect_kwargs
         scores_collect, boxes_collect, points_collect, masks_collect, angles_collect = [], [], [], [], []
-        for rot in rotations:
+        rotations = rotations if isinstance(rotations, (list, tuple)) else [0]
+        for n, rot in enumerate(rotations):
             scores, boxes, angles, points, masks = self.inferenceWithRotation(
                 bgr, name, rot, detect_kwargs)
             if len(scores) > 0:

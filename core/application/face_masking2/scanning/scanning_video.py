@@ -11,6 +11,7 @@ import skimage
 from .scanning_visor import ScanningVisor
 from ..helper.cursor import AsynchronousCursor
 from ..helper.boundingbox import BoundingBox
+from ..helper.align_helper import AlignHelper
 from ....base import XPortrait
 from ....utils import XContextTimer
 from ....utils import XVideoReader, XVideoWriter
@@ -217,7 +218,7 @@ class InfoVideo_Person:
                 r = 0.5
                 info1.box_face = (r * info2.box_face + (1 - r) * info1.box_face).astype(np.int32)
 
-    def appendInfo(self, frame_index, frame_bgr, key_points, box_track, box_face):
+    def appendInfo(self, frame_index, frame_bgr, key_points, box_track, box_face, box_face_rot):
         lft, top, rig, bot = box_face
         key_points_xy = key_points[:5, :2]  # 5,2
         key_points_score = key_points[:5, 2]  # 5,
@@ -254,30 +255,22 @@ class InfoVideo_Person:
         return info
 
     def setIdentityPreview(self, frame_index, frame_bgr, key_points, face_box):
-        def getAlignFaceCache(bgr, src_pts) -> XPortrait:
-            dst_pts = np.array([[192, 239], [318, 240], [256, 314]], dtype=np.float32)
-            transform = skimage.transform.SimilarityTransform()
-            transform.estimate(np.reshape(src_pts, (3, 2)), dst_pts)
-            warped_f = skimage.transform.warp(
-                bgr.astype(np.float32), transform.inverse, order=1, mode='constant', cval=255, output_shape=(512, 512))
-            warped = np.round(warped_f).astype(np.uint8)
-            return XPortrait(warped)
-
-        h, w, c = frame_bgr.shape
         assert isinstance(key_points, np.ndarray), key_points
         face_key_points_xy = key_points[:5, :2]
         face_key_points_score = key_points[:5, 2]
         if self.preview is None:
             face_align_cache = None
             if np.all(face_key_points_score[:3] > 0.5):
-                face_align_cache = getAlignFaceCache(frame_bgr, face_key_points_xy[[np.array([2, 1, 0], dtype=np.int32)]])
+                face_align_cache = AlignHelper.getAlignFaceCache(
+                    frame_bgr, face_key_points_xy[[np.array([2, 1, 0], dtype=np.int32)]])
                 # cv2.imwrite(R'N:\archive\2025\0215-masking\error_video\task-2440\first-{}-{}-{}.png'.format(
                 #     frame_index, self.identity, face_key_points_xy[:3, :].astype(np.int32)), face_align_cache.bgr)
             self.preview = InfoVideo_PersonPreview(frame_index, frame_bgr, face_box, key_points[:5, :], face_align_cache)
         else:
             # update the preview face
             if np.all(face_key_points_score[:3] > 0.5):
-                face_align_cache = getAlignFaceCache(frame_bgr, face_key_points_xy[[np.array([2, 1, 0], dtype=np.int32)]])
+                face_align_cache = AlignHelper.getAlignFaceCache(
+                    frame_bgr, face_key_points_xy[[np.array([2, 1, 0], dtype=np.int32)]])
                 if face_align_cache.number > 0:
                     preview = InfoVideo_PersonPreview(frame_index, frame_bgr, face_box, key_points[:5, :], face_align_cache)
                     if preview.face_score > self.preview.face_score:
@@ -387,7 +380,7 @@ class InfoVideo:
                     continue  # only person id needed
                 cur_one_box_tracker = boxes[n, :]  # 4: lft,top,rig,bot
                 cur_one_key_points = points[n, :, :]
-                cur_one_box_face, _ = self.transformPoints2FaceBox(frame_bgr, cur_one_key_points, cur_one_box_tracker)
+                cur_one_box_face, cur_one_box_rot_face = AlignHelper.transformPoints2FaceBox(frame_bgr, cur_one_key_points, cur_one_box_tracker)
                 if self.findByFaceBox(person_list_new, frame_index, cur_one_box_face):
                     continue
                 #
@@ -395,14 +388,14 @@ class InfoVideo:
                 if index1 != -1 and iou1 > 0.5:
                     person_cur = self.person_list_current.pop(index1)
                     assert isinstance(person_cur, InfoVideo_Person)
-                    person_cur.appendInfo(frame_index, frame_bgr, cur_one_key_points, cur_one_box_tracker, cur_one_box_face)
+                    person_cur.appendInfo(frame_index, frame_bgr, cur_one_key_points, cur_one_box_tracker, cur_one_box_face, cur_one_box_rot_face)
                     person_list_new.append(person_cur)
                     continue
                 index2, iou2 = self.findBestMatchOfFaceBox(frame_index, self.person_identity_history, cur_one_box_face)
                 if index2 != -1 and iou2 > 0.5:
                     person_cur = self.person_identity_history.pop(index2)
                     assert isinstance(person_cur, InfoVideo_Person)
-                    person_cur.appendInfo(frame_index, frame_bgr, cur_one_key_points, cur_one_box_tracker, cur_one_box_face)
+                    person_cur.appendInfo(frame_index, frame_bgr, cur_one_key_points, cur_one_box_tracker, cur_one_box_face, cur_one_box_rot_face)
                     person_list_new.append(person_cur)
                     continue
                 #
@@ -410,21 +403,21 @@ class InfoVideo:
                 if index3 != -1:
                     person_cur = self.person_list_current.pop(index3)
                     assert isinstance(person_cur, InfoVideo_Person)
-                    person_cur.appendInfo(frame_index, frame_bgr, cur_one_key_points, cur_one_box_tracker, cur_one_box_face)
+                    person_cur.appendInfo(frame_index, frame_bgr, cur_one_key_points, cur_one_box_tracker, cur_one_box_face, cur_one_box_rot_face)
                     person_list_new.append(person_cur)
                     continue
                 index4 = self.matchPreviousByIdentity(self.person_identity_history, int(identity[n]))
                 if index4 != -1:
                     person_cur = self.person_identity_history.pop(index4)
                     assert isinstance(person_cur, InfoVideo_Person)
-                    person_cur.appendInfo(frame_index, frame_bgr, cur_one_key_points, cur_one_box_tracker, cur_one_box_face)
+                    person_cur.appendInfo(frame_index, frame_bgr, cur_one_key_points, cur_one_box_tracker, cur_one_box_face, cur_one_box_rot_face)
                     person_list_new.append(person_cur)
                     continue
                 # create new person
                 if np.sum(cur_one_box_face) > 0:
                     # create a new person
                     person_new = self.createNewPerson(
-                        frame_index, frame_bgr, int(identity[n]), cur_one_key_points, cur_one_box_tracker, cur_one_box_face)
+                        frame_index, frame_bgr, int(identity[n]), cur_one_key_points, cur_one_box_tracker, cur_one_box_face, cur_one_box_rot_face)
                     if person_new is not None:
                         person_list_new.append(person_new)
                 else:
@@ -465,25 +458,6 @@ class InfoVideo:
                 return n
         return -1
 
-    @staticmethod
-    def realignFace(points, w, h, index):
-        # template = np.array([[197, 176], [402, 176], [302, 356]], dtype=np.float32)
-        template = np.array([[155, 88], [360, 91], [256, 213]], dtype=np.float32)
-        dst_pts = points[np.array(index, dtype=np.int32)]
-        src_pts = template[:len(dst_pts), :]
-        transform = skimage.transform.SimilarityTransform()
-        transform.estimate(src_pts, dst_pts)
-        box = np.array([[0, 0, 1], [512, 0, 1], [512, 512, 1], [0, 512, 1]], dtype=np.float32)
-        box_remap = np.dot(transform.params, box.T)[:2, :].T
-        box_remap_int = np.round(box_remap).astype(np.int32)
-        lft = np.min(box_remap_int[:, 0])
-        rig = np.max(box_remap_int[:, 0])
-        top = np.min(box_remap_int[:, 1])
-        bot = np.max(box_remap_int[:, 1])
-        # bbox = lft, top, rig, bot
-        bbox = BoundingBox(np.array([lft, top, rig, bot], dtype=np.int32)).toSquare().clip(0, 0, w - 1, h - 1).asInt()
-        return bbox
-
     def updatePersonList(self, person_list_new):
         for n in range(len(self.person_list_current)):
             person = self.person_list_current.pop()
@@ -491,107 +465,12 @@ class InfoVideo:
             self.person_identity_history.append(person)
         self.person_list_current += person_list_new
 
-    def createNewPerson(self, frame_index, bgr, track_identity, key_points, box_track, box_face):
+    def createNewPerson(self, frame_index, bgr, track_identity, key_points, box_track, box_face, box_face_rot):
         self.person_identity_seq += 1
         person = InfoVideo_Person(self.person_identity_seq, track_identity)
-        person.appendInfo(frame_index, bgr, key_points, box_track, box_face)
+        person.appendInfo(frame_index, bgr, key_points, box_track, box_face, box_face_rot)
         person.setIdentityPreview(frame_index, bgr, key_points, box_face)
         return person
-
-    @staticmethod
-    def transformPoints2FaceBox2(bgr, key_points, box, threshold=0.5):
-        h, w, c = bgr.shape
-        points_xy = key_points[:, :2].astype(np.float32)
-        points_score = key_points[:, 2].astype(np.float32)
-        if points_score[0] > threshold and points_score[1] > threshold and points_score[2] > threshold:
-            bbox = InfoVideo.realignFace(points_xy, w, h, index=[2, 1, 0])
-            # canvas = np.copy(bgr)
-            # canvas = ScanningVisor.visualSinglePerson(canvas, 0, box, bbox_rot)
-            # canvas = ScanningVisor.visualSinglePerson(canvas, 1, box, bbox)
-            # cv2.imwrite(R'X:\project\xhuman\core\application\face_masking2\document\video\scale_common\canvas.png', canvas)
-            return np.array(bbox, dtype=np.int32), None
-        if points_score[1] > threshold and points_score[2] > threshold:
-            bbox = InfoVideo.realignFace(points_xy, w, h, index=[2, 1])
-            return np.array(bbox, dtype=np.int32), None
-        return np.array([0, 0, 0, 0], dtype=np.int32), None
-
-    @staticmethod
-    def transformPoints2FaceBox(bgr, key_points, box, threshold=0.5):
-        h, w, c = bgr.shape
-        confidence = key_points[:, 2].astype(np.float32)
-        points = key_points[:, :2].astype(np.float32)
-        if confidence[3] > threshold and confidence[4] > threshold:
-            lft_ear = points[4, :]
-            rig_ear = points[3, :]
-            len_ear = np.linalg.norm(lft_ear - rig_ear)
-            lft = min(lft_ear[0], rig_ear[0])
-            rig = max(lft_ear[0], rig_ear[0])
-            ctr_ear = (lft_ear + rig_ear) / 2
-            top = int(max(ctr_ear[1] - 0.4 * len_ear, 0))
-            bot = int(min(ctr_ear[1] + 0.6 * len_ear, h))
-            if points[4, 0] < points[2, 0] < points[0, 0] < points[1, 0] < points[3, 0]:
-                bbox = BoundingBox(np.array([lft, top, rig, bot], dtype=np.int32)).toSquare().clip(0, 0, w - 1, h - 1).asInt()
-                if confidence[0] > threshold:
-                    return np.array(bbox, dtype=np.int32), confidence
-                else:
-                    return np.array(bbox, dtype=np.int32), confidence
-            else:
-                if confidence[1] > threshold and confidence[2] > threshold:
-                    bbox = InfoVideo.realignFace(points, w, h, index=[2, 1, 0])
-                    return np.array(bbox, dtype=np.int32), confidence
-        if confidence[3] > threshold and confidence[1] > threshold:
-            rig = points[3, 0]  # points[1, 0] < points[3, 0]
-            if confidence[2] > threshold:
-                assert confidence[0] > 0, confidence[0]
-                if points[2, 0] < points[0, 0] < points[1, 0] < points[3, 0]:
-                    rig_ratio = float(rig - points[1, 0]) / float(rig - points[0, 0])
-                    lft = points[2, 0] - float(rig - points[0, 0]) * (1 - rig_ratio)
-                    lft, rig = min(lft, rig), max(lft, rig)
-                    len_c2rig = abs(rig - points[0, 0])
-                    top = int(max(points[0, 1] - 0.4 * len_c2rig, 0))
-                    bot = int(min(points[0, 1] + 0.8 * len_c2rig, h))
-                    bbox = BoundingBox(np.array([lft, top, rig, bot], dtype=np.int32)).toSquare().clip(0, 0, w - 1, h - 1).asInt()
-                else:
-                    bbox = InfoVideo.realignFace(points, w, h, index=[2, 1, 0])
-                return np.array(bbox, dtype=np.int32), confidence
-            if confidence[0] > threshold:
-                if points[0, 0] < points[1, 0] < points[3, 0]:
-                    lft = points[0, 0] - abs(points[0, 0] - points[1, 0])
-                    lft, rig = min(lft, rig), max(lft, rig)
-                    len_c2rig = abs(rig - points[0, 0])
-                    top = int(max(points[0, 1] - 0.4 * len_c2rig, 0))
-                    bot = int(min(points[0, 1] + 0.8 * len_c2rig, h))
-                    bbox = BoundingBox(np.array([lft, top, rig, bot], dtype=np.int32)).toSquare().clip(0, 0, w - 1, h - 1).asInt()
-                else:
-                    bbox = InfoVideo.realignFace(points, w, h, index=[1, 0])
-                return np.array(bbox, dtype=np.int32), confidence
-        if confidence[4] > threshold and confidence[2] > threshold:
-            lft = points[4, 0]
-            if confidence[1] > threshold:
-                assert confidence[0] > 0, confidence[0]
-                if points[4, 0] < points[2, 0] < points[0, 0] < points[1, 0]:
-                    lft_ratio = float(points[2, 0] - lft) / float(points[0, 0] - lft)
-                    rig = points[1, 0] + float(points[0, 0] - lft) * (1 - lft_ratio)
-                    lft, rig = min(lft, rig), max(lft, rig)
-                    len_c2lft = abs(points[0, 0] - lft)
-                    top = int(max(points[0, 1] - 0.4 * len_c2lft, 0))
-                    bot = int(min(points[0, 1] + 0.8 * len_c2lft, h))
-                    bbox = BoundingBox(np.array([lft, top, rig, bot], dtype=np.int32)).toSquare().clip(0, 0, w - 1, h - 1).asInt()
-                else:
-                    bbox = InfoVideo.realignFace(points, w, h, index=[2, 1, 0])
-                return np.array(bbox, dtype=np.int32), confidence  # 2 + np.mean(1-confidence[5:])
-            if confidence[0] > threshold:
-                if points[4, 0] < points[2, 0] < points[0, 0]:
-                    rig = points[0, 0] + abs(points[2, 0] - points[0, 0])  # min(lft, points[0, 0])
-                    lft, rig = min(lft, rig), max(lft, rig)
-                    len_c2lft = abs(points[0, 0] - lft)
-                    top = int(max(points[0, 1] - 0.4 * len_c2lft, 0))
-                    bot = int(min(points[0, 1] + 0.8 * len_c2lft, h))
-                    bbox = BoundingBox(np.array([lft, top, rig, bot], dtype=np.int32)).toSquare().clip(0, 0, w - 1, h - 1).asInt()
-                else:
-                    bbox = InfoVideo.realignFace(points, w, h, index=[2, 0])
-                return np.array(bbox, dtype=np.int32), confidence
-        return np.array([0, 0, 0, 0], dtype=np.int32), confidence
 
     """
     merge person by face embedding
@@ -681,6 +560,9 @@ class InfoVideo:
 
     """
     """
+    def getInfoJson(self, *args, **kwargs) -> str:
+        return self.formatAsJson()
+
     def saveAsJson(self, path_out_json, schedule_call, with_frame_info=True):
         if isinstance(path_out_json, str) and path_out_json.endswith('.json'):
             schedule_call('扫描视频-保存结果', None)
@@ -725,20 +607,26 @@ class InfoVideo:
 
     """
     """
-    def saveVisualScanning(self, path_in_video, path_out_video, schedule_call):
+    def saveVisualScanning(self, path_in_video, path_out_video, schedule_call, **kwargs):
         if isinstance(path_out_video, str):
             schedule_call('扫描视频-可视化追踪', None)
             reader = XVideoReader(path_in_video)
             writer = XVideoWriter(reader.desc(True))
             writer.open(path_out_video)
             writer.visual_index = True
+            vis_box_rot = kwargs.pop('vis_box_rot', False)
             cursor_list = [(person, AsynchronousCursor(person.frame_info_list)) for person in self.person_identity_history]
             for frame_index, frame_bgr in enumerate(reader):
                 canvas = frame_bgr
                 for n, (person, cursor) in enumerate(cursor_list):
                     info: InfoVideo_Frame = cursor.current()
                     if info.frame_index == frame_index:
-                        canvas = ScanningVisor.visualSinglePerson(canvas, person.identity, info.box_track, info.box_face)
+                        if vis_box_rot is True:
+                            key_points = np.concatenate([info.key_points_xy, info.key_points_score[:, None]], axis=1)
+                            box_face, box_face_rot = AlignHelper.transformPoints2FaceBox(canvas, key_points, None)
+                            canvas = ScanningVisor.visualSinglePerson(canvas, person.identity, info.box_track, box_face_rot)
+                        else:
+                            canvas = ScanningVisor.visualSinglePerson(canvas, person.identity, info.box_track, info.box_face)
                         cursor.next()
                 writer.write(canvas)
             writer.release(reformat=True)
