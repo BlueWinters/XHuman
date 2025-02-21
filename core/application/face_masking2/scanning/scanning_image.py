@@ -149,9 +149,12 @@ class InfoImage:
             assert isinstance(info_person, InfoImage_Person)
             bgr_c, box_c = self.autoRotateForCartoon(self.bgr, info_person.box, info_person.angle)
             preview_dict[info_person.identity] = dict(
-                box=np.copy(info_person.box).tolist(),
-                angle=info_person.angle,
+                # interface
+                image=bgr_c,
+                box=box_c.tolist(),
                 face=self.cropPreviewFace(self.bgr, info_person, size, is_bgr, ext, auto_rot),
+                # for debug
+                angle=info_person.angle,
                 cartoon_image=bgr_c,
                 cartoon_box=box_c.tolist())
         return preview_dict

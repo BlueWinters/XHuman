@@ -121,7 +121,7 @@ class InfoVideo_PersonPreview:
     def isValid(self) -> bool:
         return isinstance(self.face_align_cache, XPortrait) and np.all(self.face_key_points_score[:3] >= 0.5)
 
-    def summaryAsDict(self, with_face_image, size, is_bgr) -> dict:
+    def summaryAsDict(self, for_interface, size, is_bgr) -> dict:
         summary = dict(
             frame_index=int(self.frame_index),
             face_box=self.face_box.tolist(),
@@ -131,7 +131,9 @@ class InfoVideo_PersonPreview:
             face_score=float(self.face_score),
             face_size=int(self.face_size),
         )
-        if with_face_image is True:
+        if for_interface is True:
+            summary['image'] = np.copy(self.frame_bgr)
+            summary['box'] = self.face_box.tolist()
             summary['face'] = self.transformImage(self.face_align_cache.bgr, size, is_bgr)
         return summary
 
@@ -248,7 +250,7 @@ class InfoVideo_Person:
         time_beg = self.frame_info_list[0].frame_index
         time_end = self.frame_info_list[-1].frame_index
         time_len = len(self.frame_info_list)
-        preview_dict = self.getPreviewSummary(False)
+        preview_dict = self.getPreviewSummary(for_interface=False)
         info = dict(identity=self.identity, time_beg=time_beg, time_end=time_end, time_len=time_len, preview=preview_dict)
         if with_frame_info is True:
             info['frame_info_list'] = [info.formatAsString() for info in self.frame_info_list]
@@ -278,9 +280,9 @@ class InfoVideo_Person:
             else:
                 pass  # nothing to do
 
-    def getPreviewSummary(self, with_face_image, size=256, is_bgr=True) -> dict:
+    def getPreviewSummary(self, for_interface, size=256, is_bgr=True) -> dict:
         assert isinstance(self.preview, InfoVideo_PersonPreview), self.preview
-        return self.preview.summaryAsDict(with_face_image, size, is_bgr)
+        return self.preview.summaryAsDict(for_interface, size, is_bgr)
 
     def checkPerson(self, face_size_min, num_frame_min) -> bool:
         person_frame_valid = bool(self.face_size_max > face_size_min and len(self) > num_frame_min)
