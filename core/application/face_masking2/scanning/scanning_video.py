@@ -563,7 +563,7 @@ class InfoVideo:
     """
     """
     def getInfoJson(self, *args, **kwargs) -> str:
-        return self.formatAsJson()
+        return self.formatAsJson(True)
 
     def saveAsJson(self, path_out_json, schedule_call, with_frame_info=True):
         if isinstance(path_out_json, str) and path_out_json.endswith('.json'):
