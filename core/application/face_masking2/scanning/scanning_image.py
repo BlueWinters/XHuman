@@ -54,7 +54,7 @@ class InfoImage:
                 info_image.info_person_list.append(InfoImage_Person.createFromDict(info_dict))
             return info_image
         if 'video_info_string' in kwargs and isinstance(kwargs['video_info_string'], str):
-            info_string = kwargs['info_string']
+            info_string = kwargs['video_info_string']
             assert isinstance(info_string, str)
             info_image = InfoImage(bgr=None)
             for info_dict in json.loads(info_string):
