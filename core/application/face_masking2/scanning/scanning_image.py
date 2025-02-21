@@ -152,7 +152,7 @@ class InfoImage:
                 box=np.copy(info_person.box).tolist(),
                 angle=info_person.angle,
                 face=self.cropPreviewFace(self.bgr, info_person, size, is_bgr, ext, auto_rot),
-                cartoon_bgr=bgr_c,
+                cartoon_image=bgr_c,
                 cartoon_box=box_c.tolist())
         return preview_dict
 

@@ -23,10 +23,13 @@ class MaskingStickerAlignPoints(MaskingSticker):
     @classmethod
     def parameterize(cls, **kwargs):
         if 'resource' in kwargs:
-            from ..resource import getResourceStickerAlignPoints
-            align_type, prefix = kwargs.pop('resource')
-            sticker, points = getResourceStickerAlignPoints(align_type, prefix)
-            return lambda **ka: cls(**kwargs, **ka, align_type=align_type, sticker=sticker, points=points)
+            def initialize(**ka):
+                from ..resource import getResourceStickerAlignPoints
+                align_type, prefix = kwargs.pop('resource')
+                sticker, points = getResourceStickerAlignPoints(align_type, prefix)
+                sticker_params = {align_type: points}
+                return cls(sticker=sticker, **sticker_params, **kwargs, **ka)
+            return initialize
         return lambda **ka: cls(**kwargs, **ka)
 
     """
@@ -122,38 +125,4 @@ class MaskingStickerAlignPoints(MaskingSticker):
         except XPortraitException as e:
             # note: detect no faces
             return canvas_bgr
-
-
-
-
-        # if self.align_type == 'eyes_center_affine_self' or self.align_type == 'eyes_center_affine':
-        #     h, w = source_bgr.shape[:2]
-        #     src_pts, dst_pts = self.getAlignPoints(source_bgr, box)
-        #     # matrix = cv2.estimateAffinePartial2D(src_pts, dst_pts, method=cv2.LMEDS)[0]
-        #     # param = dict(dsize=(w, h), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT, borderValue=(255, 255, 255))
-        #     # sticker_warped = cv2.warpAffine(self.sticker, matrix, **param)
-        #     transform = skimage.transform.SimilarityTransform()
-        #     transform.estimate(src_pts, dst_pts)
-        #     param = dict(order=1, mode='constant', cval=0, output_shape=(h, w))
-        #     sticker_warped = skimage.transform.warp(self.sticker.astype(np.float32), transform.inverse, **param)
-        #     sticker_warped_bgr, sticker_warped_alpha = sticker_warped[:, :, :3], sticker_warped[:, :, 3:4]
-        #     mask = sticker_warped_alpha.astype(np.float32) / 255.
-        #     fusion = canvas_bgr * (1 - mask) + sticker_warped_bgr * mask
-        #     fusion_bgr = np.round(fusion).astype(np.uint8)
-        #     return fusion_bgr
-        # if self.align_type == 'eyes_center_affine' or self.align_type == 'eyes_center_similarity':
-        #     h, w = source_bgr.shape[:2]
-        #     src_pts, dst_pts = self.getAlignPoints(source_bgr, box)
-        #     transform = skimage.transform.SimilarityTransform()
-        #     transform.estimate(src_pts, dst_pts)
-        #     param = dict(order=1, mode='constant', cval=0, output_shape=(h, w))
-        #     sticker_warped = skimage.transform.warp(self.sticker.astype(np.float32), transform.inverse, **param)
-        #     # param = dict(dsize=(w, h), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT, borderValue=(255, 255, 255))
-        #     # sticker_warped = cv2.warpAffine(self.sticker, transform.params[:2, :], **param)
-        #     sticker_warped_bgr, sticker_warped_alpha = sticker_warped[:, :, :3], sticker_warped[:, :, 3:4]
-        #     mask = sticker_warped_alpha.astype(np.float32) / 255.
-        #     fusion = canvas_bgr * (1 - mask) + sticker_warped_bgr * mask
-        #     fusion_bgr = np.round(fusion).astype(np.uint8)
-        #     return fusion_bgr
-        # raise NotImplementedError(self.align_type)
 

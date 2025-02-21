@@ -74,7 +74,7 @@ class MaskingStickerAlignBoxDynamic(MaskingSticker):
         resized_sticker = cv2.resize(sticker_image, (dst_w, dst_h))
         return resized_sticker
 
-    def inferenceOnBox(self, source_bgr, canvas_bgr, box, **kwargs):
+    def inferenceOnMaskingImage(self, source_bgr, canvas_bgr, angle, box, landmark, **kwargs):
         h, w, c = source_bgr.shape
         box_remap = self.remapBBox(self.box_src, self.box_fmt, box)
         lft, top, rig, bot = Rectangle(np.array(box_remap, dtype=np.int32)).clip(0, 0, w, h).decouple()
@@ -90,3 +90,5 @@ class MaskingStickerAlignBoxDynamic(MaskingSticker):
         canvas_bgr[top:bot, lft:rig, :] = fusion_bgr
         return canvas_bgr
 
+    def inferenceOnMaskingVideo(self, *args, **kwargs):
+        raise NotImplementedError
