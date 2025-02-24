@@ -3,6 +3,7 @@ import logging
 import os
 import cv2
 import numpy as np
+import functools
 
 
 class MaskingSticker:
@@ -13,8 +14,8 @@ class MaskingSticker:
         pass
 
     @classmethod
-    def parameterize(cls, **kwargs):
-        return lambda **ka: cls(**kwargs, **ka)
+    def parameterize(cls, *args, **kwargs):
+        return functools.partial(cls, *args, **kwargs)
 
     """
     """

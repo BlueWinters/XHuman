@@ -3,6 +3,7 @@ import logging
 import cv2
 import random
 import numpy as np
+import functools
 from .scanning.scanning_image import InfoImage_Person
 from .scanning.scanning_video import InfoVideo_Frame
 from .masking_blur import *
@@ -57,6 +58,7 @@ class MaskingFunction:
         MaskingStickerAlignPoints.NameEN: MaskingStickerAlignPoints,
         MaskingStickerAlignBoxStatic.NameEN: MaskingStickerAlignBoxStatic,
         MaskingStickerAlignBoxDynamic.NameEN: MaskingStickerAlignBoxDynamic,
+        MaskingStickerCartoon.NameEN: MaskingStickerCartoon,
     }
 
     MaskingOptionDict = {
@@ -77,9 +79,10 @@ class MaskingFunction:
         301: MaskingStickerAlignPoints.parameterize(),
         302: MaskingStickerAlignBoxStatic.parameterize(),
         303: MaskingStickerAlignBoxDynamic.parameterize(),
-        # 311: MaskingStickerAlignPoints.parameterize(resource=('eyes_center_affine', '01')),
-        # 312: MaskingStickerAlignPoints.parameterize(resource=('eyes_center_similarity', '01')),
-        # 313: MaskingStickerAlignPoints.parameterize(resource=('eyes_center_affine', '31')),
+        304: MaskingStickerCartoon.parameterize(),
+        311: MaskingStickerAlignPoints.parameterize(resource=('eyes_center_affine', '01')),
+        312: MaskingStickerAlignPoints.parameterize(resource=('eyes_center_similarity', '01')),
+        313: MaskingStickerAlignPoints.parameterize(resource=('eyes_center_affine', '31')),
     }
 
     @staticmethod
@@ -132,14 +135,14 @@ class MaskingFunction:
                 config['sticker'] = parameters.pop('bgr')
             if 'eyes_center' in parameters:
                 code = 301
-                config['eyes_center_affine'] = parameters.pop('eyes_center')
+                config['eyes_center_similarity'] = parameters.pop('eyes_center')
             if 'eyes_center_fix' in parameters:
                 code = 301
                 config['eyes_center_similarity'] = parameters.pop('eyes_center_fix')
             if 'align' in parameters:
                 NotImplementedError('sticker-align')
             if 'paste' in parameters:
-                code = 302
+                code = 304
                 config['box_tuple'] = parameters['paste']
             if 'box' in parameters:
                 code = 303

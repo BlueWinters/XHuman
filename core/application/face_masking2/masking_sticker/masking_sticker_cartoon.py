@@ -10,12 +10,11 @@ from ..helper.masking_helper import MaskingHelper
 from ....geometry import GeoFunction
 
 
-class MaskingStickerAlignBoxStatic(MaskingSticker):
+class MaskingStickerCartoon(MaskingSticker):
     """
-    this class is only worked for masking image
     """
-    NameEN = 'sticker_align_box_static'
-    NameCN = '贴纸_检测框对齐_静态'
+    NameEN = 'sticker_cartoon'
+    NameCN = '贴纸_自定义卡通'
 
     @staticmethod
     def benchmark():
@@ -24,7 +23,7 @@ class MaskingStickerAlignBoxStatic(MaskingSticker):
     """
     """
     def __init__(self, sticker, box_tuple, *args, **kwargs):
-        super(MaskingStickerAlignBoxStatic, self).__init__(*args, **kwargs)
+        super(MaskingStickerCartoon, self).__init__(*args, **kwargs)
         self.sticker = np.array(sticker, dtype=np.uint8)
         assert len(self.sticker.shape) == 3 and self.sticker.shape[2] == 4, self.sticker.shape  # H,W,4
         box_ori, box_fmt = box_tuple
@@ -36,14 +35,6 @@ class MaskingStickerAlignBoxStatic(MaskingSticker):
     def __str__(self):
         return '{}(sticker={}, box_ori={}, box_fmt={})'.format(
             self.NameEN, self.sticker.shape, self.box_ori, self.box_fmt)
-
-    def getAlignPoints(self, bgr, box, points=None):
-        assert len(box) == 4, len(box)
-        assert isinstance(points, np.ndarray), points
-        assert len(points.shape) == 2 and points.shape[1] == 2, points.shape  # 5,2 or 68,2 or 2,2
-        assert points.shape[0] == 5 or points.shape[0] == 2, points.shape
-        dst_pts = points[:2, :]
-        return dst_pts
 
     def warpSticker(self, source_bgr, src_pts, dst_pts):
         h, w, c = source_bgr.shape
@@ -83,8 +74,10 @@ class MaskingStickerAlignBoxStatic(MaskingSticker):
         preview = kwargs['preview']
         assert isinstance(preview, InfoVideo_PersonPreview), preview
         if face_points_score[2] > 0.5 and face_points_score[1] > 0.5:
+            points_eyes_preview = np.stack([preview.face_key_points_xy[2, :], preview.face_key_points_xy[1, :]], axis=0)
+            points_eyes_current = np.stack([face_points_xy[2, :], face_points_xy[1, :]], axis=0)
             sticker_warped_bgr, sticker_warped_alpha = self.warpSticker(
-                source_bgr, preview.face_key_points_xy[:2, :2], face_points_xy[:2, :2])
+                source_bgr, points_eyes_preview, points_eyes_current)
             fusion_bgr = MaskingHelper.workOnSelectedMask(
                 canvas_bgr, sticker_warped_bgr, sticker_warped_alpha, mask_blur_k=None)
             return fusion_bgr

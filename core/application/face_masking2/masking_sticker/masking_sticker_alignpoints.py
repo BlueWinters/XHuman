@@ -4,6 +4,7 @@ import os
 import cv2
 import numpy as np
 import skimage
+import functools
 from .masking_sticker import MaskingSticker
 from ..helper.masking_helper import MaskingHelper
 from ....base import XPortrait, XPortraitHelper, XPortraitException
@@ -21,16 +22,16 @@ class MaskingStickerAlignPoints(MaskingSticker):
         pass
 
     @classmethod
-    def parameterize(cls, **kwargs):
+    def parameterize(cls, *args, **kwargs):
         if 'resource' in kwargs:
-            def initialize(**ka):
+            def initialize(*a, **ka):
                 from ..resource import getResourceStickerAlignPoints
                 align_type, prefix = kwargs.pop('resource')
                 sticker, points = getResourceStickerAlignPoints(align_type, prefix)
-                sticker_params = {align_type: points}
-                return cls(sticker=sticker, **sticker_params, **kwargs, **ka)
+                sticker_params = {'sticker': sticker, align_type: points}
+                return functools.partial(cls, *a, *args, **ka, **kwargs, **sticker_params)
             return initialize
-        return lambda **ka: cls(**kwargs, **ka)
+        return functools.partial(cls, *args, **kwargs)
 
     """
     """
@@ -41,11 +42,7 @@ class MaskingStickerAlignPoints(MaskingSticker):
         # option1: default, face feature with 5 points
         self.align_type = 'face_feature_affine_self'
         self.points = None
-        # option2: eyes center(affine transform)
-        if 'eyes_center_affine' in kwargs:
-            self.align_type = 'eyes_center_affine'
-            self.points = np.reshape(np.array(kwargs['eyes_center_affine'], dtype=np.int32), (2, 2))
-        # option3: eyes center fix(similarity transform)
+        # option2: eyes center fix(similarity transform)
         if 'eyes_center_similarity' in kwargs:
             self.align_type = 'eyes_center_similarity'
             self.points = np.reshape(np.array(kwargs['eyes_center_similarity'], dtype=np.int32), (2, 2))
@@ -61,16 +58,8 @@ class MaskingStickerAlignPoints(MaskingSticker):
         if self.align_type == 'eyes_center_affine_self':
             # eyes_center_affine_self: align points come from sticker(which is a cartoon portrait)
             raise NotImplementedError
-            # if self.points is None:
-            #     # TODO: handle exceptions when sticker has no face
-            #     self.points = np.copy(XPortrait(self.sticker[:, :, :3], strategy='area').points[0, :])
-            # cache = XPortrait(bgr[top:bot, lft:rig, :3], strategy='area', asserting=True)
-            # dst_pts = np.copy(XPortraitHelper.getCenterOfEachEyes(cache))[0]
-            # dst_pts[:, 0] += lft
-            # dst_pts[:, 1] += top
-            # return self.points, dst_pts
         # eyes_center: 2 points, center of both eyes
-        if self.align_type == 'eyes_center_affine' or self.align_type == 'eyes_center_similarity':
+        if self.align_type == 'eyes_center_similarity':
             if isinstance(points, np.ndarray):
                 assert len(points.shape) == 2 and points.shape[1] == 2, points.shape  # 5,2 or 68,2 or 2,2
                 if points.shape[0] == 68:

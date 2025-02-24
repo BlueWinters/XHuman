@@ -27,6 +27,10 @@ class InfoVideo_Frame:
     key_points_score: np.ndarray  # 5,
     box_copy: bool
 
+    @property
+    def key_points(self) -> np.ndarray:
+        return np.concatenate([self.key_points_xy, self.key_points_score[:, None]], axis=1)  # 5,3
+
     @staticmethod
     def fromString(string):
         string_split = string.split(';')
@@ -80,8 +84,8 @@ class InfoVideo_PersonPreview:
         self.face_align_cache = face_align_cache
         # others
         self.face_size = self.getFaceSize(face_box)
-        self.face_key_points_xy = face_key_points[:, :2]
-        self.face_key_points_score = face_key_points[:, 2]
+        self.face_key_points_xy = face_key_points[:, :2]  # 5,2
+        self.face_key_points_score = face_key_points[:, 2]  # 5,
         self.face_valid_points_num = int(np.count_nonzero((self.face_key_points_score > 0.5).astype(np.int32)))
 
     def __str__(self):
@@ -121,7 +125,7 @@ class InfoVideo_PersonPreview:
     def isValid(self) -> bool:
         return isinstance(self.face_align_cache, XPortrait) and np.all(self.face_key_points_score[:3] >= 0.5)
 
-    def summaryAsDict(self, for_interface, size, is_bgr) -> dict:
+    def summaryAsDict(self, size, is_bgr) -> dict:
         summary = dict(
             frame_index=int(self.frame_index),
             face_box=self.face_box.tolist(),
@@ -131,9 +135,11 @@ class InfoVideo_PersonPreview:
             face_score=float(self.face_score),
             face_size=int(self.face_size),
         )
-        if for_interface is True:
+        if size > 0 and isinstance(is_bgr, bool):
+            assert isinstance(self.frame_bgr, np.ndarray), self.frame_bgr
             summary['image'] = np.copy(self.frame_bgr)
             summary['box'] = self.face_box.tolist()
+            assert isinstance(self.face_align_cache, XPortrait), self.face_align_cache
             summary['face'] = self.transformImage(self.face_align_cache.bgr, size, is_bgr)
         return summary
 
@@ -149,7 +155,7 @@ class InfoVideo_PersonPreview:
     @property
     def face_score(self):
         if hasattr(self, '_face_score') is False:
-            self._face_score = 90
+            self._face_score = 0
             if isinstance(self.face_align_cache, XPortrait):
                 if self.face_align_cache.number > 0:
                     self._face_score = self.getFaceScore(self.face_align_cache, self.face_box)
@@ -163,8 +169,7 @@ class InfoVideo_Person:
     def createFromDict(info_dict):
         person = InfoVideo_Person(info_dict['identity'], yolo_identity=-1)
         person.frame_info_list = [InfoVideo_Frame.fromString(each) for each in info_dict['frame_info_list']]
-        if 'preview' in info_dict:
-            person.preview = InfoVideo_PersonPreview.createFromDict(info_dict['preview'])
+        person.preview = InfoVideo_PersonPreview.createFromDict(info_dict['preview'])
         return person
 
     """
@@ -250,7 +255,7 @@ class InfoVideo_Person:
         time_beg = self.frame_info_list[0].frame_index
         time_end = self.frame_info_list[-1].frame_index
         time_len = len(self.frame_info_list)
-        preview_dict = self.getPreviewSummary(for_interface=False)
+        preview_dict = self.getPreviewSummary(size=0, is_bgr=None)
         info = dict(identity=self.identity, time_beg=time_beg, time_end=time_end, time_len=time_len, preview=preview_dict)
         if with_frame_info is True:
             info['frame_info_list'] = [info.formatAsString() for info in self.frame_info_list]
@@ -275,14 +280,15 @@ class InfoVideo_Person:
                     frame_bgr, face_key_points_xy[[np.array([2, 1, 0], dtype=np.int32)]])
                 if face_align_cache.number > 0:
                     preview = InfoVideo_PersonPreview(frame_index, frame_bgr, face_box, key_points[:5, :], face_align_cache)
-                    if preview.face_score > self.preview.face_score:
+                    if preview.face_score > self.preview.face_score or preview.face_valid_points_num > self.preview.face_valid_points_num:
+                        logging.info('identity={}, {} --> {}'.format(self.identity, self.preview, preview))
                         self.preview = preview  # just update
             else:
                 pass  # nothing to do
 
-    def getPreviewSummary(self, for_interface, size=256, is_bgr=True) -> dict:
+    def getPreviewSummary(self, size, is_bgr) -> dict:
         assert isinstance(self.preview, InfoVideo_PersonPreview), self.preview
-        return self.preview.summaryAsDict(for_interface, size, is_bgr)
+        return self.preview.summaryAsDict(size, is_bgr)
 
     def checkPerson(self, face_size_min, num_frame_min) -> bool:
         person_frame_valid = bool(self.face_size_max > face_size_min and len(self) > num_frame_min)
@@ -316,7 +322,7 @@ class InfoVideo:
             info_video = InfoVideo()
             info_video.person_identity_history = [InfoVideo_Person.createFromDict(info) for info in json.loads(kwargs['video_info_string'])]
             return info_video
-        raise NotImplementedError('both "path_in_json" and "path_in_json" not in kwargs')
+        raise NotImplementedError('both "path_in_json" and "video_info_string" not in kwargs')
 
     def __init__(self, **kwargs):
         self.person_identity_seq = 0
@@ -590,7 +596,6 @@ class InfoVideo:
             cursor_list = []
             for person in person_remain_list:
                 assert isinstance(person, InfoVideo_Person)
-                # cursor = AsynchronousCursor(person.frame_info_list, beg, end)
                 cursor = person.getFrameInfoCursor(beg, end)
                 if cursor.valid() is True:
                     cursor_list.append((person, cursor))
@@ -604,7 +609,7 @@ class InfoVideo:
         for person in self.getSortedHistory():
             logging.info(str(person))
             if person.checkPerson(face_size_min, num_frame_min) is True:
-                preview_dict[person.identity] = person.getPreviewSummary(True, size, is_bgr)
+                preview_dict[person.identity] = person.getPreviewSummary(size, is_bgr)
         return preview_dict
 
     """
@@ -616,7 +621,8 @@ class InfoVideo:
             writer = XVideoWriter(reader.desc(True))
             writer.open(path_out_video)
             writer.visual_index = True
-            vis_box_rot = kwargs.pop('vis_box_rot', False)
+            vis_box_rot = kwargs.pop('vis_box_rot', True)
+            vis_points = kwargs.pop('vis_points', True)
             cursor_list = [(person, AsynchronousCursor(person.frame_info_list)) for person in self.person_identity_history]
             for frame_index, frame_bgr in enumerate(reader):
                 canvas = frame_bgr
@@ -626,9 +632,9 @@ class InfoVideo:
                         if vis_box_rot is True:
                             key_points = np.concatenate([info.key_points_xy, info.key_points_score[:, None]], axis=1)
                             box_face, box_face_rot = AlignHelper.transformPoints2FaceBox(canvas, key_points, None)
-                            canvas = ScanningVisor.visualSinglePerson(canvas, person.identity, info.box_track, box_face_rot)
+                            canvas = ScanningVisor.visualSinglePerson(canvas, person.identity, info.box_track, box_face_rot, info.key_points)
                         else:
-                            canvas = ScanningVisor.visualSinglePerson(canvas, person.identity, info.box_track, info.box_face)
+                            canvas = ScanningVisor.visualSinglePerson(canvas, person.identity, info.box_track, info.box_face, info.key_points)
                         cursor.next()
                 writer.write(canvas)
             writer.release(reformat=True)

@@ -136,9 +136,8 @@ class MaskingHelper:
         h, w, c = frame_bgr.shape
         assert isinstance(person, InfoVideo_Person), person
         assert isinstance(frame_info, InfoVideo_Frame), frame_info
+        assert person.identity in option_dict, (person.identity, str(option_dict))
         if frame_info.frame_index == frame_index:
-            if person.identity not in option_dict:
-                return
             if option_dict[person.identity].NameEN.startswith('sticker'):
                 return None
             if np.sum(frame_info.box_face) == 0:

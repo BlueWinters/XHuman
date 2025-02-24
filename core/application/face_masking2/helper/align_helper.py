@@ -28,8 +28,8 @@ class AlignHelper:
 
     @staticmethod
     def getAlignFaceCache(bgr, src_pts) -> XPortrait:
-        # dst_pts = np.array([[192, 239], [318, 240], [256, 314]], dtype=np.float32)
-        dst_pts = np.array([[155, 88], [360, 91], [256, 213]], dtype=np.float32)
+        dst_pts = np.array([[192, 239], [318, 240], [256, 314]], dtype=np.float32)
+        # dst_pts = np.array([[155, 88], [360, 91], [256, 213]], dtype=np.float32)
         transform = skimage.transform.SimilarityTransform()
         transform.estimate(np.reshape(src_pts, (3, 2)), dst_pts)
         warped_f = skimage.transform.warp(

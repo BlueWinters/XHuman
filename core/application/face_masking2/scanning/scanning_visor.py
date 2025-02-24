@@ -14,7 +14,12 @@ class ScanningVisor:
         return Colors.getColor(index)
 
     @staticmethod
-    def visualSinglePerson(canvas: np.ndarray, identity, box_track, box_face=None):
+    def visualEachSkeleton(canvas, key_points_xy, key_points_score, color, n1, n2, threshold_score=0.5):
+        if key_points_score[n1] > threshold_score and key_points_score[n2] > threshold_score:
+            cv2.line(canvas, key_points_xy[n1], key_points_xy[n2], color, 2)
+
+    @staticmethod
+    def visualSinglePerson(canvas: np.ndarray, identity, box_track, box_face=None, key_points=None):
         color = ScanningVisor.getVisColor(identity)
         rect_th = max(round(sum(canvas.shape) / 2 * 0.003), 2)
         text_th = max(rect_th - 1, 1)
@@ -36,6 +41,12 @@ class ScanningVisor:
                 cv2.line(canvas, box_face[1], box_face[2], color, 1)
                 cv2.line(canvas, box_face[2], box_face[3], color, 1)
                 cv2.line(canvas, box_face[3], box_face[0], color, 1)
+        if isinstance(key_points, np.ndarray) and key_points.shape == (5, 3):
+            key_points_xy, key_points_score = np.round(key_points[:, :2]).astype(np.int32), key_points[:, 2]
+            ScanningVisor.visualEachSkeleton(canvas, key_points_xy, key_points_score, color, 0, 1)
+            ScanningVisor.visualEachSkeleton(canvas, key_points_xy, key_points_score, color, 0, 2)
+            ScanningVisor.visualEachSkeleton(canvas, key_points_xy, key_points_score, color, 1, 3)
+            ScanningVisor.visualEachSkeleton(canvas, key_points_xy, key_points_score, color, 2, 4)
         label = str(identity)
         box_width, box_height = cv2.getTextSize(label, 0, fontScale=text_size, thickness=text_th)[0]
         outside = point1[1] - box_height - 3 >= 0  # label fits outside box

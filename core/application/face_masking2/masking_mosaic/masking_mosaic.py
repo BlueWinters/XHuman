@@ -3,6 +3,7 @@ import logging
 import os
 import cv2
 import numpy as np
+import functools
 from ..helper.masking_helper import MaskingHelper
 
 
@@ -14,8 +15,8 @@ class MaskingMosaic:
         pass
 
     @classmethod
-    def parameterize(cls, **kwargs):
-        return lambda **ka: cls(**kwargs, **ka)
+    def parameterize(cls, *args, **kwargs):
+        return functools.partial(cls, *args, **kwargs)
 
     """
     """
