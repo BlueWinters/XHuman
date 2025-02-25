@@ -70,10 +70,24 @@ class MaskingBlurWater(MaskingBlur):
                 bgr_copy[ii, jj, :] = bgr[new_yy, new_xx, :]
         return bgr_copy
 
+    @staticmethod
+    def mapCoordinates(bgr, bgr_copy, int_x, int_y, x_new, y_new):
+        h, w, c = bgr.shape
+        for ii in range(h):
+            for jj in range(w):
+                new_xx = int_x[ii, jj]
+                new_yy = int_y[ii, jj]
+                if x_new[ii, jj] < 0 or x_new[ii, jj] > w - 1:
+                    continue
+                if y_new[ii, jj] < 0 or y_new[ii, jj] > h - 1:
+                    continue
+                bgr_copy[ii, jj, :] = bgr[new_yy, new_xx, :]
+        return bgr_copy
+
     def inference(self, bgr):
         if self.xy_map is None:
             self.xy_map = self.getBlurWaterParameters(bgr, self.a, self.b)  # update x,y mapping coordinates
         assert len(self.xy_map) == 4, len(self.xy_map)
         int_x, int_y, x_new, y_new = self.xy_map
-        return self.mapCoordinatesWithJit(bgr, np.copy(bgr), int_x, int_y, x_new, y_new)
+        return self.mapCoordinates(bgr, np.copy(bgr), int_x, int_y, x_new, y_new)
 
