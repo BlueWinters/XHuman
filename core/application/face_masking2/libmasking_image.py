@@ -37,8 +37,10 @@ class LibMaskingImage:
             info_image = InfoImage.createFromJson(**parameters)
             bgr = cv2.imread(path_image_or_bgr, cv2.IMREAD_COLOR) if isinstance(path_image_or_bgr, str) \
                 else np.array(path_image_or_bgr, dtype=np.uint8)
-            MaskingHelper.getPortraitMaskingWithInfoImage(
-                bgr, info_image, options_dict, with_hair=with_hair, expand=0.5)
+            # MaskingHelper.getPortraitMaskingWithInfoImage(
+            #     bgr, info_image, options_dict, with_hair=with_hair, expand=0.8)
+            MaskingHelper.getPortraitMaskingWithInfoImagePlus(
+                bgr, info_image, options_dict, with_hair=with_hair, expand=0.8)
             canvas_bgr = np.copy(bgr)
             for n, info_person in enumerate(info_image):
                 assert isinstance(info_person, InfoImage_Person)

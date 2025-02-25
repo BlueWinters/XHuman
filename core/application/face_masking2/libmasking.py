@@ -37,6 +37,8 @@ class LibMasking:
     def maskingVideo(*args, **kwargs):
         return LibMaskingVideo.maskingVideo(*args, **kwargs)
 
+    """
+    """
     @staticmethod
     def getMaskingOption(*args, **kwargs):
         return MaskingFunction.getMaskingOption(*args, **kwargs)

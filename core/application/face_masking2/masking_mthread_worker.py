@@ -30,14 +30,17 @@ class MaskingVideoWorker(XVideoMThreadWorker):
     @staticmethod
     def maskingFunction(frame_index, frame_bgr, cursor_list, options_dict, with_hair, preview_dict):
         canvas_bgr = np.copy(frame_bgr)
+        mask_info_list = MaskingHelper.getPortraitMaskingWithInfoVideoPlus(
+            frame_index, frame_bgr, cursor_list, options_dict, with_hair)
         for _, (person, cursor) in enumerate(cursor_list):
             assert isinstance(cursor, AsynchronousCursor)
             info = cursor.current()
             if info.frame_index == frame_index:
                 if person.identity in options_dict:
                     masking_option = options_dict[person.identity]
-                    parameters = dict(mask_info=MaskingHelper.getPortraitMaskingWithInfoVideo(
-                        frame_index, frame_bgr, person, info, options_dict, with_hair=with_hair))
+                    # mask_info = MaskingHelper.getPortraitMaskingWithInfoVideo(
+                    #     frame_index, frame_bgr, person, info, options_dict, with_hair=with_hair)
+                    parameters = dict(mask_info=mask_info_list[person.identity])
                     # if frame_index < 20:
                     #     import cv2
                     #     cv2.imwrite(R'N:\archive\2025\0215-masking\error_video\05\image\{}.png'.format(frame_index), mask_info['mask'])
