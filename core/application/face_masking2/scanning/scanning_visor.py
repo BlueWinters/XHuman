@@ -37,10 +37,10 @@ class ScanningVisor:
                 canvas = cv2.rectangle(canvas, point1_face, point2_face, color, 1)
             if len(box_face.shape) == 2 and box_face.shape[1] == 2:
                 box_face = np.array(box_face).astype(np.int32)
-                cv2.line(canvas, box_face[0], box_face[1], color, 1)
-                cv2.line(canvas, box_face[1], box_face[2], color, 1)
-                cv2.line(canvas, box_face[2], box_face[3], color, 1)
-                cv2.line(canvas, box_face[3], box_face[0], color, 1)
+                cv2.line(canvas, box_face[0], box_face[1], (255, 255, 255), 2)
+                cv2.line(canvas, box_face[1], box_face[2], color, 2)
+                cv2.line(canvas, box_face[2], box_face[3], color, 2)
+                cv2.line(canvas, box_face[3], box_face[0], color, 2)
         if isinstance(key_points, np.ndarray) and key_points.shape == (5, 3):
             key_points_xy, key_points_score = np.round(key_points[:, :2]).astype(np.int32), key_points[:, 2]
             ScanningVisor.visualEachSkeleton(canvas, key_points_xy, key_points_score, color, 0, 1)

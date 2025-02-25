@@ -8,11 +8,7 @@ from ....base import XPortrait
 
 class AlignHelper:
     @staticmethod
-    def realignFacePoints(points, w, h, index):
-        # template = np.array([[197, 176], [402, 176], [302, 356]], dtype=np.float32)
-        template = np.array([[155, 88], [360, 91], [256, 213]], dtype=np.float32)
-        dst_pts = points[np.array(index, dtype=np.int32)]
-        src_pts = template[:len(dst_pts), :]
+    def alignPoints(src_pts, dst_pts, w, h):
         transform = skimage.transform.SimilarityTransform()
         transform.estimate(src_pts, dst_pts)
         box = np.array([[0, 0, 1], [512, 0, 1], [512, 512, 1], [0, 512, 1]], dtype=np.float32)
@@ -22,9 +18,32 @@ class AlignHelper:
         rig = np.max(box_remap_int[:, 0])
         top = np.min(box_remap_int[:, 1])
         bot = np.max(box_remap_int[:, 1])
-        # bbox = lft, top, rig, bot
         bbox = BoundingBox(np.array([lft, top, rig, bot], dtype=np.int32)).toSquare().clip(0, 0, w - 1, h - 1).asInt()
         return bbox, box_remap_int
+
+    @staticmethod
+    def alignFrontalPoints(points, w, h, idx_dst, idx_tpl):
+        # template = np.array([[197, 176], [402, 176], [302, 356]], dtype=np.float32)
+        template = np.array([[155, 88], [360, 91], [256, 213]], dtype=np.float32)
+        dst_pts = points[np.array(idx_dst, dtype=np.int32)]
+        src_pts = template[np.array(idx_tpl, dtype=np.int32), :]
+        return AlignHelper.alignPoints(src_pts, dst_pts, w, h)
+
+    @staticmethod
+    def alignProfileLeft(points, w, h, idx_dst, idx_tpl):
+        # nose, left-eye, left-ear
+        template = np.array([[451, 190], [365, 110], [104, 211]], dtype=np.float32)
+        dst_pts = points[np.array(idx_dst, dtype=np.int32)]
+        src_pts = template[np.array(idx_tpl, dtype=np.int32), :]
+        return AlignHelper.alignPoints(src_pts, dst_pts, w, h)
+
+    @staticmethod
+    def alignProfileRight(points, w, h, idx_dst, idx_tpl):
+        # nose, right-eye, right-ear
+        template = np.array([[61, 190], [147, 110], [408, 211]], dtype=np.float32)
+        dst_pts = points[np.array(idx_dst, dtype=np.int32)]
+        src_pts = template[np.array(idx_tpl, dtype=np.int32), :]
+        return AlignHelper.alignPoints(src_pts, dst_pts, w, h)
 
     @staticmethod
     def getAlignFaceCache(bgr, src_pts) -> XPortrait:
@@ -46,16 +65,16 @@ class AlignHelper:
         points_score = key_points[:, 2].astype(np.float32)
         # index: left-eye, right-eye, nose
         if points_score[0] > threshold and points_score[1] > threshold and points_score[2] > threshold:
-            bbox, box_rot = AlignHelper.realignFacePoints(points_xy, w, h, index=[2, 1, 0])
+            bbox, box_rot = AlignHelper.alignFrontalPoints(points_xy, w, h, idx_dst=[2, 1, 0], idx_tpl=[0, 1, 2])
             return np.array(bbox, dtype=np.int32), np.reshape(box_rot, (4, 2))
         if points_score[1] > threshold and points_score[2] > threshold:
-            bbox, box_rot = AlignHelper.realignFacePoints(points_xy, w, h, index=[2, 1])
+            bbox, box_rot = AlignHelper.alignFrontalPoints(points_xy, w, h, idx_dst=[2, 1], idx_tpl=[0, 1])
             return np.array(bbox, dtype=np.int32), np.reshape(box_rot, (4, 2))
         if points_score[0] > threshold and points_score[1] > threshold:
-            bbox, box_rot = AlignHelper.realignFacePoints(points_xy, w, h, index=[1, 0])
+            bbox, box_rot = AlignHelper.alignProfileRight(points_xy, w, h, idx_dst=[0, 1], idx_tpl=[0, 1])
             return np.array(bbox, dtype=np.int32), np.reshape(box_rot, (4, 2))
         if points_score[0] > threshold and points_score[2] > threshold:
-            bbox, box_rot = AlignHelper.realignFacePoints(points_xy, w, h, index=[2, 0])
+            bbox, box_rot = AlignHelper.alignProfileLeft(points_xy, w, h, idx_dst=[0, 2], idx_tpl=[0, 1])
             return np.array(bbox, dtype=np.int32), np.reshape(box_rot, (4, 2))
         return np.array([0, 0, 0, 0], dtype=np.int32), np.array([0, 0, 0, 0], dtype=np.int32)
 
@@ -81,7 +100,7 @@ class AlignHelper:
                     return np.array(bbox, dtype=np.int32), confidence
             else:
                 if confidence[1] > threshold and confidence[2] > threshold:
-                    bbox = AlignHelper.realignFacePoints(points, w, h, index=[2, 1, 0])
+                    bbox = AlignHelper.alignFrontalPoints(points, w, h, idx_dst=[2, 1, 0], idx_tpl=[0, 1, 2])
                     return np.array(bbox, dtype=np.int32), confidence
         if confidence[3] > threshold and confidence[1] > threshold:
             rig = points[3, 0]  # points[1, 0] < points[3, 0]
@@ -96,7 +115,7 @@ class AlignHelper:
                     bot = int(min(points[0, 1] + 0.8 * len_c2rig, h))
                     bbox = BoundingBox(np.array([lft, top, rig, bot], dtype=np.int32)).toSquare().clip(0, 0, w - 1, h - 1).asInt()
                 else:
-                    bbox = AlignHelper.realignFacePoints(points, w, h, index=[2, 1, 0])
+                    bbox = AlignHelper.alignFrontalPoints(points, w, h, idx_dst=[2, 1, 0], idx_tpl=[0, 1, 2])
                 return np.array(bbox, dtype=np.int32), confidence
             if confidence[0] > threshold:
                 if points[0, 0] < points[1, 0] < points[3, 0]:
@@ -107,7 +126,7 @@ class AlignHelper:
                     bot = int(min(points[0, 1] + 0.8 * len_c2rig, h))
                     bbox = BoundingBox(np.array([lft, top, rig, bot], dtype=np.int32)).toSquare().clip(0, 0, w - 1, h - 1).asInt()
                 else:
-                    bbox = AlignHelper.realignFacePoints(points, w, h, index=[1, 0])
+                    bbox = AlignHelper.alignProfileRight(points, w, h, idx_dst=[0, 1], idx_tpl=[0, 1])
                 return np.array(bbox, dtype=np.int32), confidence
         if confidence[4] > threshold and confidence[2] > threshold:
             lft = points[4, 0]
@@ -122,7 +141,7 @@ class AlignHelper:
                     bot = int(min(points[0, 1] + 0.8 * len_c2lft, h))
                     bbox = BoundingBox(np.array([lft, top, rig, bot], dtype=np.int32)).toSquare().clip(0, 0, w - 1, h - 1).asInt()
                 else:
-                    bbox = AlignHelper.realignFacePoints(points, w, h, index=[2, 1, 0])
+                    bbox = AlignHelper.alignFrontalPoints(points, w, h, idx_dst=[2, 1, 0], idx_tpl=[0, 1, 2])
                 return np.array(bbox, dtype=np.int32), confidence  # 2 + np.mean(1-confidence[5:])
             if confidence[0] > threshold:
                 if points[4, 0] < points[2, 0] < points[0, 0]:
@@ -133,6 +152,6 @@ class AlignHelper:
                     bot = int(min(points[0, 1] + 0.8 * len_c2lft, h))
                     bbox = BoundingBox(np.array([lft, top, rig, bot], dtype=np.int32)).toSquare().clip(0, 0, w - 1, h - 1).asInt()
                 else:
-                    bbox = AlignHelper.realignFacePoints(points, w, h, index=[2, 0])
+                    bbox = AlignHelper.alignProfileLeft(points, w, h, idx_dst=[0, 2], idx_tpl=[0, 1])
                 return np.array(bbox, dtype=np.int32), confidence
         return np.array([0, 0, 0, 0], dtype=np.int32), confidence
