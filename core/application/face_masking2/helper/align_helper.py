@@ -44,11 +44,18 @@ class AlignHelper:
         h, w, c = bgr.shape
         points_xy = key_points[:, :2].astype(np.float32)
         points_score = key_points[:, 2].astype(np.float32)
+        # index: left-eye, right-eye, nose
         if points_score[0] > threshold and points_score[1] > threshold and points_score[2] > threshold:
             bbox, box_rot = AlignHelper.realignFacePoints(points_xy, w, h, index=[2, 1, 0])
             return np.array(bbox, dtype=np.int32), np.reshape(box_rot, (4, 2))
         if points_score[1] > threshold and points_score[2] > threshold:
             bbox, box_rot = AlignHelper.realignFacePoints(points_xy, w, h, index=[2, 1])
+            return np.array(bbox, dtype=np.int32), np.reshape(box_rot, (4, 2))
+        if points_score[0] > threshold and points_score[1] > threshold:
+            bbox, box_rot = AlignHelper.realignFacePoints(points_xy, w, h, index=[1, 0])
+            return np.array(bbox, dtype=np.int32), np.reshape(box_rot, (4, 2))
+        if points_score[0] > threshold and points_score[2] > threshold:
+            bbox, box_rot = AlignHelper.realignFacePoints(points_xy, w, h, index=[2, 0])
             return np.array(bbox, dtype=np.int32), np.reshape(box_rot, (4, 2))
         return np.array([0, 0, 0, 0], dtype=np.int32), np.array([0, 0, 0, 0], dtype=np.int32)
 

@@ -65,7 +65,8 @@ class InfoImage:
     """
     """
     def __init__(self, bgr):
-        self.cache = bgr if bgr is None else XPortrait(bgr, rotations=[0, 90, 180, 270])  # 0, 90, 180, 270
+        self.cache = bgr if bgr is None else \
+            XPortrait(bgr, rotations=[0, 90, 180, 270], detect_handle='SDK')  # 0, 90, 180, 270
         self.info_person_list = []  # [InfoPerson,]
 
     def __iter__(self):
@@ -125,7 +126,8 @@ class InfoImage:
     """
     @staticmethod
     def cropPreviewFace(bgr, info_person, size, is_bgr, ext=0.2, auto_rot=True):
-        lft, top, rig, bot = Rectangle(info_person.landmark).toSquare().expand(ext, ext).asInt()
+        h, w, c = bgr.shape
+        lft, top, rig, bot = Rectangle(info_person.landmark).toSquare().expand(ext, ext).clip(0, 0, w, h).asInt()
         crop = np.copy(bgr[top:bot, lft:rig, :])
         crop_rot = GeoFunction.rotateImage(crop, info_person.angle) if auto_rot is True else crop
         resized = cv2.resize(crop_rot, (size, size))

@@ -28,10 +28,8 @@ class MaskingStickerAlignBoxDynamic(MaskingSticker):
         self.sticker_bounding_rect = None
         if isinstance(box_tuple, (list, tuple)):
             box_src, box_fmt = box_tuple
-            assert isinstance(box_src, (list, tuple)) and len(box_src) == 4, box_src
-            assert isinstance(box_fmt, (list, tuple)) and len(box_fmt) == 4, box_fmt
-            self.box_src = np.reshape(np.array(box_src, dtype=np.int32), (-1,))
-            self.box_fmt = np.reshape(np.array(box_fmt, dtype=np.int32), (-1,))
+            self.box_src = np.reshape(np.array(box_src, dtype=np.int32), (4,))
+            self.box_fmt = np.reshape(np.array(box_fmt, dtype=np.int32), (4,))
             self.sticker_bounding_rect = None
 
     def __str__(self):

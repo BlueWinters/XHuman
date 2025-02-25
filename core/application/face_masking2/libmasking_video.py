@@ -1,4 +1,4 @@
-
+import functools
 import logging
 import os
 import cv2
@@ -7,7 +7,7 @@ import numpy as np
 from .masking_function import MaskingFunction
 from .scanning.scanning_video import InfoVideo
 from .helper.cursor import AsynchronousCursor
-from .masking_mthread_worker import MaskingVideoSession
+from .masking_mthread_worker import MaskingVideoSession, MaskingVideoWorker
 from .helper.masking_helper import MaskingHelper
 from ...utils import XVideoReader, XVideoWriter, Resource, XContextTimer
 
@@ -49,19 +49,8 @@ class LibMaskingVideo:
                 cursor_list = info_video.getInfoCursorList(len(reader), 1, min_frames)[0]['cursor_list']
                 preview_dict = info_video.getIdentityPreviewDict(size=0, is_bgr=None)
                 for frame_index, frame_bgr in enumerate(reader):
-                    canvas_bgr = np.copy(frame_bgr)
-                    for _, (person, cursor) in enumerate(cursor_list):
-                        assert isinstance(cursor, AsynchronousCursor)
-                        info = cursor.current()
-                        if info.frame_index == frame_index:
-                            if person.identity in options_dict:
-                                masking_option = options_dict[person.identity]
-                                mask_info = MaskingHelper.getPortraitMaskingWithInfoVideo(
-                                    frame_index, frame_bgr, person, info, options_dict, with_hair=with_hair)
-                                canvas_bgr = MaskingFunction.maskingVideoFace(
-                                    frame_bgr, canvas_bgr, info, masking_option,
-                                    mask_info=mask_info, preview=preview_dict[person.identity])
-                            cursor.next()
+                    canvas_bgr = MaskingVideoWorker.maskingFunction(
+                        frame_index, frame_bgr, cursor_list, options_dict, with_hair, preview_dict)
                     writer.write(canvas_bgr)
                     bar.update(1)
                 # reformat
@@ -71,24 +60,10 @@ class LibMaskingVideo:
             with XContextTimer(True):
                 assert num_workers > 0, num_workers
                 cursor_list = info_video.getInfoCursorList(len(reader), num_workers, min_frames)
+                preview_dict = info_video.getIdentityPreviewDict(size=0, is_bgr=None)
                 session = MaskingVideoSession(
-                    num_workers, path_in_video, options_dict, cursor_list, lambda v: schedule_call('打码视频', v),
-                    with_hair=with_hair, debug_mode=debug_mode)
+                    num_workers, path_in_video, options_dict, cursor_list, schedule_call,
+                    with_hair=with_hair, preview_dict=preview_dict, debug_mode=debug_mode)
                 session.start()
                 session.dump(path_out_video)
 
-    # def maskingFunction(self, frame_index, frame_bgr, cursor_list, options_dict, with_hair, preview_dict):
-    #     canvas_bgr = np.copy(frame_bgr)
-    #     for _, (person, cursor) in enumerate(cursor_list):
-    #         assert isinstance(cursor, AsynchronousCursor)
-    #         info = cursor.current()
-    #         if info.frame_index == frame_index:
-    #             if person.identity in options_dict:
-    #                 masking_option = options_dict[person.identity]
-    #                 mask_info = MaskingHelper.getPortraitMaskingWithInfoVideo(
-    #                     frame_index, frame_bgr, person, info, options_dict, with_hair=with_hair)
-    #                 canvas_bgr = MaskingFunction.maskingVideoFace(
-    #                     frame_bgr, canvas_bgr, info, masking_option,
-    #                     mask_info=mask_info, preview=preview_dict[person.identity])
-    #             cursor.next()
-    #     return canvas_bgr

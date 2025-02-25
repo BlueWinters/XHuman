@@ -61,6 +61,9 @@ class XPortrait(XCache):
     def __init__(self, bgr, **kwargs):
         super(XPortrait, self).__init__(bgr=bgr)
         self.url = kwargs.pop('url', '127.0.0.0')
+        # detection: 'SDK' or 'Insightface'
+        detect_handle = dict(SDK=self._detectWithSDK, InsightFace=self._detectWithInsightface)
+        self._detect = detect_handle[kwargs.pop('detect_handle', 'SDK')]
         # strategy: 'area', 'score', 'pose
         self.strategy = kwargs.pop('strategy', 'area')
         assert self.strategy in ['area', 'score', 'pose'], self.strategy
@@ -170,7 +173,33 @@ class XPortrait(XCache):
             return _return(np.argsort(center_y)[::-1])
         raise NotImplementedError('no such sorting strategy: {}'.format(strategy))
 
-    def _detect(self, bgr):
+    @staticmethod
+    def doNMS(scores, boxes, nms_threshold=0.4):
+        dets = np.hstack((boxes, scores[:, np.newaxis])).astype(np.float32, copy=False)
+        x1 = dets[:, 0]
+        y1 = dets[:, 1]
+        x2 = dets[:, 2]
+        y2 = dets[:, 3]
+        scores = dets[:, 4]
+        areas = (x2 - x1 + 1) * (y2 - y1 + 1)
+        order = scores.argsort()[::-1]
+        keep = []
+        while order.size > 0:
+            i = order[0]
+            keep.append(i)
+            xx1 = np.maximum(x1[i], x1[order[1:]])
+            yy1 = np.maximum(y1[i], y1[order[1:]])
+            xx2 = np.minimum(x2[i], x2[order[1:]])
+            yy2 = np.minimum(y2[i], y2[order[1:]])
+            w = np.maximum(0.0, xx2 - xx1 + 1)
+            h = np.maximum(0.0, yy2 - yy1 + 1)
+            inter = w * h
+            ovr = inter / (areas[i] + areas[order[1:]] - inter)
+            inds = np.where(ovr <= nms_threshold)[0]
+            order = order[inds + 1]
+        return keep
+
+    def _detectWithSDK(self, bgr):
         from .xexception import XPortraitExceptionAssert
         # module = self._getModule('function')
         # scores, boxes, points, landmarks, radians = module('detect', bgr, 'source')
@@ -188,6 +217,40 @@ class XPortrait(XCache):
         self._landmark = np.reshape(landmarks, (-1, 68, 2))
         self._radian = np.reshape(radians, (-1, 3))
         self._angles = np.reshape(angles, (-1,))
+
+    def _detectWithInsightface(self, bgr):
+        from .xexception import XPortraitExceptionAssert
+        module = self._getModule('insightface')
+        targets = 'source' if self.local() else 'json'
+        data = module(bgr, targets=targets)
+        data = data if isinstance(data, list) else json.loads(data[0])  # online or debug
+        scores = np.array([one['score'] for one in data])
+        boxes = np.stack([one['bbox'] for one in data], axis=0)
+        points = np.stack([one['kps'] for one in data], axis=0)
+        radians = np.stack([one['pose'] for one in data], axis=0)[:, np.array([1, 2, 0], dtype=np.int32)] / 180 * np.pi
+        landmarks = np.stack([one['landmark_3d_68'][:, :2] for one in data], axis=0)
+        angles = np.zeros(shape=(len(data),), dtype=np.int32)
+        age = np.stack([one['age'] for one in data], axis=0)
+        sex = [one['sex'] for one in data]
+        scores, boxes, points, landmarks, radians, angles = self._resort(
+            self.strategy, scores, boxes, points, landmarks, radians, angles)
+        boxes[:, 0::2] = np.clip(boxes[:, 0::2], 0, self.shape[1])
+        boxes[:, 1::2] = np.clip(boxes[:, 1::2], 0, self.shape[0])
+        points[:, :, 0] = np.clip(points[:, :, 0], 0, self.shape[1])
+        points[:, :, 1] = np.clip(points[:, :, 1], 0, self.shape[0])
+        landmarks[:, :, 0] = np.clip(landmarks[:, :, 0], 0, self.shape[1])
+        landmarks[:, :, 1] = np.clip(landmarks[:, :, 1], 0, self.shape[0])
+        if self.asserting is True:
+            XPortraitExceptionAssert.assertNoFace(len(scores))
+        self._number = len(scores)
+        self._score = np.reshape(scores, (-1,))
+        self._box = np.reshape(np.round(boxes).astype(np.int32), (-1, 4,))
+        self._points = np.reshape(np.round(points).astype(np.int32), (-1, 5, 2))
+        self._landmark = np.reshape(np.round(landmarks).astype(np.int32), (-1, 68, 2))
+        self._radian = np.reshape(radians, (-1, 3))
+        self._angles = np.reshape(angles, (-1,))
+        self._age = np.reshape(age, (-1))
+        self._sex = sex  # [str,]
 
     @property
     def number(self):

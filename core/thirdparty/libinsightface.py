@@ -194,13 +194,16 @@ class LibInsightFaceWrapper:
             logging.warning('{} useless parameters in {}'.format(
                 len(args), self.__class__.__name__))
         target = kwargs.pop('targets', 'source')
-        return target
+        image_angles = kwargs.pop('image_angles', None)
+        return target, dict(image_angles=image_angles)
 
-    def _packageAsDict(self, face, array2list:bool=False):
+    @staticmethod
+    def _packageAsDict(face, array2list:bool=False):
         data = dict()
         for key, value in face.items():
             if isinstance(value, np.ndarray):
-                data[key] = value.tolist() if array2list == True else value
+                data[key] = value.tolist() if array2list is True else value
+        data['score'] = float(face['det_score'])
         data['sex'] = 'M' if face['gender'] == 1 else 'F'
         data['age'] = int(face.age)
         return data
@@ -224,7 +227,7 @@ class LibInsightFaceWrapper:
 
     def callWithSingleInput(self, bgr:np.ndarray, *args, **kwargs):
         self._assertImage(bgr)
-        target = self._extractArgsSingle(*args, **kwargs)
+        target, inference_kwargs = self._extractArgsSingle(*args, **kwargs)
         source_face_list = self.application.get(bgr)
         return self._returnResultFromSingle(source_face_list, target)
 

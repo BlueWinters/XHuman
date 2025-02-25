@@ -202,7 +202,8 @@ class LibFaceDetection:
         batch_image_np = np.expand_dims(np.transpose(image, (2, 0, 1)), axis=0)
         return batch_image_np
 
-    def non_maximum_suppression(self, scores, boxes, nms_threshold):
+    @staticmethod
+    def non_maximum_suppression(scores, boxes, nms_threshold):
         """Pure Python NMS baseline."""
         dets = np.hstack((boxes, scores[:, np.newaxis])).astype(np.float32, copy=False)
 
@@ -388,7 +389,7 @@ class LibFaceDetection:
             boxes = np.concatenate(boxes_collect, axis=0)
             points = np.concatenate(points_collect, axis=0)
             angles = np.concatenate(angles_collect, axis=0)
-            keep = self.non_maximum_suppression(scores, boxes, self.nms_threshold)
+            keep = self.non_maximum_suppression(scores, boxes, 0.3)
             scores = scores[keep]
             boxes = boxes[keep]
             points = points[keep]

@@ -28,10 +28,8 @@ class MaskingStickerAlignBoxStatic(MaskingSticker):
         self.sticker = np.array(sticker, dtype=np.uint8)
         assert len(self.sticker.shape) == 3 and self.sticker.shape[2] == 4, self.sticker.shape  # H,W,4
         box_ori, box_fmt = box_tuple
-        assert isinstance(box_ori, list) and len(box_ori) == 4, box_ori
-        assert isinstance(box_fmt, list) and len(box_fmt) == 4, box_fmt
-        self.box_ori = np.reshape(np.array(box_ori, dtype=np.int32), (-1,))
-        self.box_fmt = np.reshape(np.array(box_fmt, dtype=np.int32), (-1,))
+        self.box_ori = np.reshape(np.array(box_ori, dtype=np.int32), (4,))
+        self.box_fmt = np.reshape(np.array(box_fmt, dtype=np.int32), (4,))
 
     def __str__(self):
         return '{}(sticker={}, box_ori={}, box_fmt={})'.format(

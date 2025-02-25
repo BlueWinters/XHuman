@@ -86,6 +86,7 @@ class InfoVideo_PersonPreview:
         self.face_size = self.getFaceSize(face_box)
         self.face_key_points_xy = face_key_points[:, :2]  # 5,2
         self.face_key_points_score = face_key_points[:, 2]  # 5,
+        self.face_key_points_score_sum = float(np.sum(self.face_key_points_score))
         self.face_valid_points_num = int(np.count_nonzero((self.face_key_points_score > 0.5).astype(np.int32)))
 
     def __str__(self):
@@ -170,6 +171,7 @@ class InfoVideo_Person:
         person = InfoVideo_Person(info_dict['identity'], yolo_identity=-1)
         person.frame_info_list = [InfoVideo_Frame.fromString(each) for each in info_dict['frame_info_list']]
         person.preview = InfoVideo_PersonPreview.createFromDict(info_dict['preview'])
+        person.face_size_max = info_dict['face_size_max']
         return person
 
     """
@@ -256,7 +258,9 @@ class InfoVideo_Person:
         time_end = self.frame_info_list[-1].frame_index
         time_len = len(self.frame_info_list)
         preview_dict = self.getPreviewSummary(size=0, is_bgr=None)
-        info = dict(identity=self.identity, time_beg=time_beg, time_end=time_end, time_len=time_len, preview=preview_dict)
+        info = dict(
+            identity=self.identity, time_beg=time_beg, time_end=time_end, time_len=time_len,
+            face_size_max=self.face_size_max, preview=preview_dict)
         if with_frame_info is True:
             info['frame_info_list'] = [info.formatAsString() for info in self.frame_info_list]
         return info
@@ -275,12 +279,14 @@ class InfoVideo_Person:
             self.preview = InfoVideo_PersonPreview(frame_index, frame_bgr, face_box, key_points[:5, :], face_align_cache)
         else:
             # update the preview face
-            if np.all(face_key_points_score[:3] > 0.5):
+            face_valid_points_num = int(np.count_nonzero((face_key_points_score > 0.5).astype(np.int32)))
+            if np.all(face_key_points_score[:3] > 0.5) and face_valid_points_num >= self.preview.face_valid_points_num and \
+                    (self.preview.face_key_points_score_sum - np.sum(face_key_points_score)) > 0.1:
                 face_align_cache = AlignHelper.getAlignFaceCache(
                     frame_bgr, face_key_points_xy[[np.array([2, 1, 0], dtype=np.int32)]])
                 if face_align_cache.number > 0:
                     preview = InfoVideo_PersonPreview(frame_index, frame_bgr, face_box, key_points[:5, :], face_align_cache)
-                    if preview.face_score > self.preview.face_score or preview.face_valid_points_num > self.preview.face_valid_points_num:
+                    if preview.face_score > self.preview.face_score:
                         logging.info('identity={}, {} --> {}'.format(self.identity, self.preview, preview))
                         self.preview = preview  # just update
             else:

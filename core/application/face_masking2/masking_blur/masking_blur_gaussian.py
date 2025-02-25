@@ -19,7 +19,7 @@ class MaskingBlurGaussian(MaskingBlur):
 
     """
     """
-    def __init__(self, kernel=15, align_type='head', *args, **kwargs):
+    def __init__(self, kernel=25, align_type='head', *args, **kwargs):
         super(MaskingBlurGaussian, self).__init__(*args, **kwargs)
         kernel = kernel if kernel % 2 == 1 else (kernel + 1)  # should be odd
         assert 0 < kernel <= 64, kernel
