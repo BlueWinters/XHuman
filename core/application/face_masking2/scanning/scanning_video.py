@@ -281,7 +281,7 @@ class InfoVideo_Person:
             # update the preview face
             face_valid_points_num = int(np.count_nonzero((face_key_points_score > 0.5).astype(np.int32)))
             if np.all(face_key_points_score[:3] > 0.5) and face_valid_points_num >= self.preview.face_valid_points_num and \
-                    (self.preview.face_key_points_score_sum - np.sum(face_key_points_score)) > 0.1:
+                    (np.sum(face_key_points_score) - self.preview.face_key_points_score_sum) > 0.1:
                 face_align_cache = AlignHelper.getAlignFaceCache(
                     frame_bgr, face_key_points_xy[[np.array([2, 1, 0], dtype=np.int32)]])
                 if face_align_cache.number > 0:
