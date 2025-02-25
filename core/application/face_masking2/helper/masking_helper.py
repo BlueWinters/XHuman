@@ -90,7 +90,7 @@ class MaskingHelper:
         return mask_dict
 
     @staticmethod
-    def getPortraitMaskingWithInfoVideo2(frame_index, frame_bgr, cursor_list, option_dict, with_hair=True, expand=0.5):
+    def getPortraitMaskingWithInfoVideoPlus(frame_index, frame_bgr, cursor_list, option_dict, with_hair=True, expand=0.5):
         h, w, c = frame_bgr.shape
         mask_dict = dict()
         for n, (person, cursor) in enumerate(cursor_list):
@@ -106,15 +106,15 @@ class MaskingHelper:
                     continue
                 if np.sum(frame_info.box_face) == 0:
                     mask_dict[person.identity] = None
-                    print('skip --> frame_index-{}, person_identity-{}, person_face_box-{}'.format(
+                    logging.info('skip --> frame_index-{}, person_identity-{}, person_face_box-{}'.format(
                         frame_index, person.identity, frame_info.box_face))
                     continue  # invalid face box
                 lft, top, rig, bot = Rectangle(frame_info.box_face).expand(expand, expand).clip(0, 0, w, h).asInt()
                 bgr_copy = np.copy(frame_bgr)
-                # for i in range(len(cursor_list)):
-                #     if i != n:
-                #         face_mask = XPortraitHelper.getFaceRegionByLandmark(h, w, cursor_list[i].landmark)
-                #         bgr_copy[face_mask > 0] = 255
+                for i in range(len(cursor_list)):
+                    if i != n:
+                        face_mask = XPortraitHelper.getFaceRegionByLandmark(h, w, cursor_list[i].landmark)
+                        bgr_copy[face_mask > 0] = 255
                 part = bgr_copy[top:bot, lft:rig]
                 part_parsing = XManager.getModules('portrait_parsing')(part)
                 if with_hair is False:
@@ -127,12 +127,10 @@ class MaskingHelper:
                 mask = np.zeros(shape=(h, w), dtype=np.uint8)
                 mask[top:bot, lft:rig] = part_mask_single
                 mask_dict[person.identity] = dict(mask=mask, box=(lft, top, rig, bot))
-                # cv2.imwrite(R'N:\archive\2025\0215-masking\error_video\04\parsing\{}-mask.png'.format(n), mask)
-                # cv2.imwrite(R'N:\archive\2025\0215-masking\error_image\01\parsing\{}-parsing.png'.format(n), XManager.getModules('portrait_parsing').colorize(part_rot_parsing))
         return mask_dict
 
     @staticmethod
-    def getPortraitMaskingWithInfoVideo(frame_index, frame_bgr, person, frame_info, option_dict, with_hair=True, expand=0.5):
+    def getPortraitMaskingWithInfoVideo(frame_index, frame_bgr, person, frame_info, option_dict, with_hair=True, expand=0.8):
         h, w, c = frame_bgr.shape
         assert isinstance(person, InfoVideo_Person), person
         assert isinstance(frame_info, InfoVideo_Frame), frame_info

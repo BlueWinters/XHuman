@@ -66,7 +66,7 @@ class InfoImage:
     """
     def __init__(self, bgr):
         self.cache = bgr if bgr is None else \
-            XPortrait(bgr, rotations=[0, 90, 180, 270], detect_handle='SDK')  # 0, 90, 180, 270
+            XPortrait(bgr, rotations=[0, 180], detect_handle='InsightFace')  # 0, 90, 180, 270; InsightFace
         self.info_person_list = []  # [InfoPerson,]
 
     def __iter__(self):
@@ -98,7 +98,7 @@ class InfoImage:
         canvas = np.copy(self.cache.bgr)
         for person in self.info_person_list:
             assert isinstance(person, InfoImage_Person)
-            canvas = ScanningVisor.visualSinglePerson(canvas, person.identity, person.box)
+            canvas = ScanningVisor.visualSinglePerson(canvas, person.identity, person.box, key_points=person.landmark)
         return canvas
 
     def saveVisualScanning(self, path_out_image):
@@ -125,7 +125,7 @@ class InfoImage:
     """
     """
     @staticmethod
-    def cropPreviewFace(bgr, info_person, size, is_bgr, ext=0.2, auto_rot=True):
+    def cropPreviewFace(bgr, info_person, size, is_bgr, ext=0.2, auto_rot=False):
         h, w, c = bgr.shape
         lft, top, rig, bot = Rectangle(info_person.landmark).toSquare().expand(ext, ext).clip(0, 0, w, h).asInt()
         crop = np.copy(bgr[top:bot, lft:rig, :])
@@ -145,7 +145,7 @@ class InfoImage:
         resized = cv2.resize(bgr, (size, size))
         return resized if is_bgr is True else cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
 
-    def getIdentityPreviewDict(self, size=256, is_bgr=True, ext=0.2, auto_rot=True) -> dict:
+    def getIdentityPreviewDict(self, size=256, is_bgr=True, ext=0.2, auto_rot=False) -> dict:
         preview_dict = {}
         for info_person in self.info_person_list:
             assert isinstance(info_person, InfoImage_Person)

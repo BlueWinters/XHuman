@@ -5,6 +5,8 @@ import os
 import typing
 import cv2
 import numpy as np
+import functools
+from ..helper.align_helper import AlignHelper
 from ....utils import Colors
 
 
@@ -41,6 +43,11 @@ class ScanningVisor:
                 cv2.line(canvas, box_face[1], box_face[2], color, 2)
                 cv2.line(canvas, box_face[2], box_face[3], color, 2)
                 cv2.line(canvas, box_face[3], box_face[0], color, 2)
+        if isinstance(key_points, np.ndarray) and key_points.shape == (68, 2):
+            for n in range(68):
+                x, y = key_points[n, :].tolist()
+                position = (int(round(x)), int(round(y)))
+                cv2.circle(canvas, position, 2, color)
         if isinstance(key_points, np.ndarray) and key_points.shape == (5, 3):
             key_points_xy, key_points_score = np.round(key_points[:, :2]).astype(np.int32), key_points[:, 2]
             ScanningVisor.visualEachSkeleton(canvas, key_points_xy, key_points_score, color, 0, 1)
@@ -56,3 +63,17 @@ class ScanningVisor:
         cv2.putText(canvas, label, (point1[0], point1[1] - 2 if outside else point1[1] + box_height + 2),
                     0, text_size, (255, 255, 255), thickness=text_th)
         return canvas
+
+    @staticmethod
+    def visualSinglePersonFromInfoFrame(frame_canvas: np.ndarray, person, info_frame, vis_box_rotations, vis_key_points):
+        visual_function = functools.partial(
+            ScanningVisor.visualSinglePerson, frame_canvas, person.identity, info_frame.box_track,
+            key_points=info_frame.key_points if vis_key_points is True else None)
+        if vis_box_rotations is True:
+            key_points = np.concatenate([info_frame.key_points_xy, info_frame.key_points_score[:, None]], axis=1)
+            box_face, box_face_rot = AlignHelper.transformPoints2FaceBox(frame_canvas, key_points, None)
+            frame_canvas = visual_function(box_face_rot)
+        else:
+            frame_canvas = visual_function(info_frame.box_face)
+        return frame_canvas
+
