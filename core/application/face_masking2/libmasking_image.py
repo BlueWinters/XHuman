@@ -31,7 +31,7 @@ class LibMaskingImage:
         parameters = dict(
             path_in_json=kwargs.pop('path_in_json', None),
             video_info_string=kwargs.pop('video_info_string', ''),)
-        with_hair = kwargs.pop('with_hair', False)
+        with_hair = kwargs.pop('with_hair', True)
 
         with XContextTimer(True):
             info_image = InfoImage.createFromJson(**parameters)
