@@ -1,7 +1,7 @@
 
 import logging
 
-__version__ = '1.0.3'
+__version__ = '1.0.5'
 logging.error('face_masking2 version: {}'.format(__version__))
 
 """
@@ -13,5 +13,9 @@ version - 1.0.2
     note: 一些功能重修
 version - 1.0.3
     note: 图片打码Json文件修复
+version - 1.0.4
+    note: 修复无法检测到人时候的异常bug
+version - 1.0.5
+    note: 恢复自定义贴纸类型
 """
 

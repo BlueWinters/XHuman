@@ -110,7 +110,7 @@ class MaskingFunction:
     """
     @staticmethod
     def getMaskingOption(code, parameters):
-        assert isinstance(parameters, dict)
+        # assert isinstance(parameters, dict)
         config = dict()
         if code in [101, 102, 103, 104, 105]:
             if 'focus_type' in parameters:
@@ -131,21 +131,25 @@ class MaskingFunction:
                 if mosaic_type == 'mosaic_pixel_polygon_big':
                     code = 206
         if code in [301, ]:
-            if 'bgr' in parameters:
-                config['sticker'] = parameters.pop('bgr')
-            if 'eyes_center' in parameters:
-                code = 301
-                config['eyes_center_similarity'] = parameters.pop('eyes_center')
-            if 'eyes_center_fix' in parameters:
-                code = 301
-                config['eyes_center_similarity'] = parameters.pop('eyes_center_fix')
-            if 'align' in parameters:
-                NotImplementedError('sticker-align')
-            if 'paste' in parameters:
-                code = 304
-                config['box_tuple'] = parameters['paste']
-            if 'box' in parameters:
+            if isinstance(parameters, np.ndarray):
                 code = 303
-                config['box_tuple'] = parameters['box']
+                config['sticker'] = parameters
+            if isinstance(parameters, dict):
+                if 'bgr' in parameters:
+                    config['sticker'] = parameters.pop('bgr')
+                if 'eyes_center' in parameters:
+                    code = 301
+                    config['eyes_center_similarity'] = parameters.pop('eyes_center')
+                if 'eyes_center_fix' in parameters:
+                    code = 301
+                    config['eyes_center_similarity'] = parameters.pop('eyes_center_fix')
+                if 'align' in parameters:
+                    NotImplementedError('sticker-align')
+                if 'paste' in parameters:
+                    code = 304
+                    config['box_tuple'] = parameters['paste']
+                if 'box' in parameters:
+                    code = 303
+                    config['box_tuple'] = parameters['box']
         return MaskingFunction.MaskingOptionDict[code](**config)
 
