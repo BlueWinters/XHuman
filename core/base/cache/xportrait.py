@@ -260,19 +260,27 @@ class XPortrait(XCache):
         targets = 'source' if self.local() else 'json'
         data = module(bgr, targets=targets)
         data = data if isinstance(data, list) else json.loads(data[0])  # online or debug
-        scores = np.array([one['score'] for one in data])
-        boxes = np.stack([one['bbox'] for one in data], axis=0)
-        points = np.stack([one['kps'] for one in data], axis=0)
-        radians = np.stack([one['pose'] for one in data], axis=0)[:, np.array([1, 2, 0], dtype=np.int32)] / 180 * np.pi
-        landmarks = np.stack([one['landmark_3d_68'][:, :2] for one in data], axis=0)
-        age = np.stack([one['age'] for one in data], axis=0)
-        sex = [one['sex'] for one in data]
-        boxes[:, 0::2] = np.clip(boxes[:, 0::2], 0, self.shape[1])
-        boxes[:, 1::2] = np.clip(boxes[:, 1::2], 0, self.shape[0])
-        points[:, :, 0] = np.clip(points[:, :, 0], 0, self.shape[1])
-        points[:, :, 1] = np.clip(points[:, :, 1], 0, self.shape[0])
-        landmarks[:, :, 0] = np.clip(landmarks[:, :, 0], 0, self.shape[1])
-        landmarks[:, :, 1] = np.clip(landmarks[:, :, 1], 0, self.shape[0])
+        if len(data) > 0:
+            scores = np.array([one['score'] for one in data])
+            boxes = np.stack([one['bbox'] for one in data], axis=0)
+            points = np.stack([one['kps'] for one in data], axis=0)
+            landmarks = np.stack([one['landmark_3d_68'][:, :2] for one in data], axis=0)
+            radians = np.stack([one['pose'] for one in data], axis=0)[:, np.array([1, 2, 0], dtype=np.int32)] / 180 * np.pi
+            age = np.stack([one['age'] for one in data], axis=0)
+            sex = [one['sex'] for one in data]
+            # clip the value
+            boxes[:, 0::2] = np.clip(boxes[:, 0::2], 0, self.shape[1])
+            boxes[:, 1::2] = np.clip(boxes[:, 1::2], 0, self.shape[0])
+            points[:, :, 0] = np.clip(points[:, :, 0], 0, self.shape[1])
+            points[:, :, 1] = np.clip(points[:, :, 1], 0, self.shape[0])
+            landmarks[:, :, 0] = np.clip(landmarks[:, :, 0], 0, self.shape[1])
+            landmarks[:, :, 1] = np.clip(landmarks[:, :, 1], 0, self.shape[0])
+        else:
+            scores = np.zeros(shape=(0,), dtype=np.float32)
+            boxes = np.zeros(shape=(0, 4), dtype=np.float32)
+            points = np.zeros(shape=(0, 4, 2), dtype=np.float32)
+            landmarks = np.zeros(shape=(0, 68, 2), dtype=np.float32)
+            radians = np.zeros(shape=(0, 3), dtype=np.float32)
         return scores, boxes, points, landmarks, radians
 
     def inferenceWithRotation(self, bgr, image_angle=0):

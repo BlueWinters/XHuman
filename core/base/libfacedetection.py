@@ -145,7 +145,6 @@ class LibFaceDetection:
         'parameters': 'base/face_detection.ts'
     }
 
-
     """
     """
     def __init__(self, *args, **kwargs):
