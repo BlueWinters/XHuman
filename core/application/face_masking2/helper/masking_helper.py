@@ -98,8 +98,10 @@ class MaskingHelper:
         # segmentation
         module = XManager.getModules('ultralytics')['yolo11m-seg']
         result = module(bgr, classes=[0], verbose=False)[0]
-        result_masks = np.round(result.masks.cpu().numpy().data * 255).astype(np.uint8)  # note: C,H,W and [0,1]
-        masks = [cv2.resize(result_masks[n, :, :], (w, h)) for n in range(len(result_masks))]
+        masks = list()
+        if len(result) > 0 and result.masks is not None:
+            result_masks = np.round(result.masks.cpu().numpy().data * 255).astype(np.uint8)  # note: C,H,W and [0,1]
+            masks = [cv2.resize(result_masks[n, :, :], (w, h)) for n in range(len(result_masks))]
         mask_dict = dict()
         for n, info_person in enumerate(info_image):
             assert isinstance(info_person, InfoImage_Person)
@@ -115,7 +117,7 @@ class MaskingHelper:
             #         face_mask = XPortraitHelper.getFaceRegionByLandmark(h, w, info_image.info_person_list[i].landmark)
             #         bgr_copy[face_mask > 0] = 255
             # 2.
-            if len(result) > 0 and result.masks is not None:
+            if len(result) > 0 and result.masks is not None and len(masks) > 0:
                 mask_box = np.zeros(shape=(h, w), dtype=np.uint8)
                 l, t, r, b = info_person.box
                 mask_box[t:b, l:r] = 255
@@ -191,8 +193,10 @@ class MaskingHelper:
         # segmentation
         module = XManager.getModules('ultralytics')['yolo11m-seg']
         result = module(frame_bgr, classes=[0], verbose=False)[0]
-        result_masks = np.round(result.masks.cpu().numpy().data * 255).astype(np.uint8)  # note: C,H,W and [0,1]
-        masks = [cv2.resize(result_masks[n, :, :], (w, h)) for n in range(len(result_masks))]
+        masks = list()
+        if len(result) > 0 and result.masks is not None:
+            result_masks = np.round(result.masks.cpu().numpy().data * 255).astype(np.uint8)  # note: C,H,W and [0,1]
+            masks = [cv2.resize(result_masks[n, :, :], (w, h)) for n in range(len(result_masks))]
         # main pipeline
         mask_dict = dict()
         for n, (person, cursor) in enumerate(cursor_list):
@@ -220,7 +224,7 @@ class MaskingHelper:
                 #         face_mask = XPortraitHelper.getFaceRegionByLandmark(h, w, cursor_list[i].landmark)
                 #         bgr_copy[face_mask > 0] = 255
                 # 2.
-                if len(result) > 0 and result.masks is not None:
+                if len(result) > 0 and result.masks is not None and len(masks) > 0:
                     mask_box = np.zeros(shape=masks[0].shape, dtype=np.uint8)
                     l, t, r, b = frame_info.box_face
                     mask_box[t:b, l:r] = 255
