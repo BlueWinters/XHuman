@@ -15,9 +15,9 @@ class InfoImage_Person:
     """
     def __init__(self, identity, box, points, landmark, angle):
         self.identity = identity
-        self.box = np.copy(box)
-        self.points = np.copy(points)
-        self.landmark = np.copy(landmark)
+        self.box = np.round(box).astype(np.int32)
+        self.points = np.round(points).astype(np.int32)
+        self.landmark = np.round(landmark).astype(np.int32)
         self.angle = int(angle)
 
     def formatAsDict(self) -> dict:
@@ -152,8 +152,8 @@ class InfoImage:
             bgr_c, box_c = self.autoRotateForCartoon(self.bgr, info_person.box, info_person.angle)
             preview_dict[info_person.identity] = dict(
                 # interface
-                image=bgr_c,
-                box=box_c.tolist(),
+                image=self.bgr,
+                box=info_person.box.tolist(),
                 face=self.cropPreviewFace(self.bgr, info_person, size, is_bgr, ext, auto_rot),
                 # for debug
                 angle=info_person.angle,

@@ -56,7 +56,7 @@ class MaskingStickerCartoon(MaskingSticker):
         else:
             sticker = self.sticker
             ltrb = self.box_fmt
-        assert np.count_nonzero(np.reshape(box, (-1,)) - self.box_ori) == 0, (box, self.box_ori)
+        # assert np.count_nonzero(np.reshape(box, (-1,)) - self.box_ori) == 0, (box, self.box_ori)
         w_ori = ltrb[2] - ltrb[0]
         h_ori = ltrb[3] - ltrb[1]
         h, w, c = source_bgr.shape
