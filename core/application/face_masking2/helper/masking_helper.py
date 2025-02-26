@@ -4,6 +4,7 @@ import cv2
 import numpy as np
 import skimage
 from .cursor import AsynchronousCursor
+from .angle_helper import AngleHelper
 from ..scanning.scanning_image import InfoImage, InfoImage_Person
 from ..scanning.scanning_video import InfoVideo, InfoVideo_Person, InfoVideo_Frame
 from ....base import XPortrait, XPortraitHelper
@@ -57,42 +58,6 @@ class MaskingHelper:
         return max_mask
 
     @staticmethod
-    def getAngle(v):
-        if v[1] > 0:
-            r = abs(v[0]) / abs(v[1])
-            if v[0] < 0:
-                if r < 1:
-                    return 0
-                else:
-                    return 270
-            elif v[0] > 0:
-                if r < 1:
-                    return 0
-                else:
-                    return 90
-            else:
-                return 0
-        elif v[1] < 0:
-            r = abs(v[0]) / abs(v[1])
-            if v[0] < 0:
-                if r < 1:
-                    return 180
-                else:
-                    return 270
-            elif v[0] > 0:
-                if r < 1:
-                    return 180
-                else:
-                    return 90
-            else:
-                return 180
-        else:
-            if v[0] < 0:
-                return 270
-            else:
-                return 90
-
-    @staticmethod
     def getPortraitMaskingWithInfoImagePlus(bgr, info_image: InfoImage, option_dict, with_hair=True, expand=0.8):
         h, w, c = bgr.shape
         # segmentation
@@ -132,8 +97,7 @@ class MaskingHelper:
             # ajna = np.mean(info_person.landmark[17:27, :], axis=0)
             # angle = 0 if ajna[1] < info_person.landmark[30, 1] else 180  # or info_person.angle
             # angle = info_person.angle
-            vector = info_person.landmark[30, :] - np.mean(info_person.landmark[17:27, :], axis=0)
-            angle = MaskingHelper.getAngle(vector)
+            angle = AngleHelper.getAngleRollByLandmark(info_person.landmark)
             logging.info('identity-{}, angle-{}'.format(info_person.identity, angle))
             part = bgr_copy[top:bot, lft:rig]
             part_rot = GeoFunction.rotateImage(part, angle)

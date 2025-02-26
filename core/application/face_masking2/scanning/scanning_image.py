@@ -5,6 +5,7 @@ import os
 import cv2
 import numpy as np
 import json
+from ..helper.angle_helper import AngleHelper
 from .scanning_visor import ScanningVisor
 from ....base import XPortrait
 from ....geometry import Rectangle, GeoFunction
@@ -18,7 +19,7 @@ class InfoImage_Person:
         self.box = np.round(box).astype(np.int32)
         self.points = np.round(points).astype(np.int32)
         self.landmark = np.round(landmark).astype(np.int32)
-        self.angle = int(angle)
+        self.angle = AngleHelper.getAngleRollByLandmark(self.landmark)
 
     def formatAsDict(self) -> dict:
         return dict(
@@ -152,8 +153,8 @@ class InfoImage:
             bgr_c, box_c = self.autoRotateForCartoon(self.bgr, info_person.box, info_person.angle)
             preview_dict[info_person.identity] = dict(
                 # interface
-                image=self.bgr,
-                box=info_person.box.tolist(),
+                image=bgr_c,
+                box=box_c.tolist(),
                 face=self.cropPreviewFace(self.bgr, info_person, size, is_bgr, ext, auto_rot),
                 # for debug
                 angle=info_person.angle,
