@@ -220,42 +220,10 @@ class XPortrait(XCache):
         scores, boxes, points, angles = self._getModule('face_detection')(bgr, image_angles=[0])
         landmarks = self._getModule('face_landmark')(bgr, image_angles=angles, boxes=boxes)
         radians = self._getModule('head_pose')(bgr, landmarks=landmarks)
-        return scores, boxes, points, landmarks, radians
+        data = dict(_score=scores, _box=boxes, _points=points, _landmark=landmarks, _radian=radians)
+        return len(scores), data
 
     def _detectWithInsightface(self, bgr):
-        # from .xexception import XPortraitExceptionAssert
-        # module = self._getModule('insightface')
-        # targets = 'source' if self.local() else 'json'
-        # data = module(bgr, targets=targets)
-        # data = data if isinstance(data, list) else json.loads(data[0])  # online or debug
-        # scores = np.array([one['score'] for one in data])
-        # boxes = np.stack([one['bbox'] for one in data], axis=0)
-        # points = np.stack([one['kps'] for one in data], axis=0)
-        # radians = np.stack([one['pose'] for one in data], axis=0)[:, np.array([1, 2, 0], dtype=np.int32)] / 180 * np.pi
-        # landmarks = np.stack([one['landmark_3d_68'][:, :2] for one in data], axis=0)
-        # angles = np.zeros(shape=(len(data),), dtype=np.int32)
-        # age = np.stack([one['age'] for one in data], axis=0)
-        # sex = [one['sex'] for one in data]
-        # scores, boxes, points, landmarks, radians, angles = self._resort(
-        #     self.strategy, scores, boxes, points, landmarks, radians, angles)
-        # boxes[:, 0::2] = np.clip(boxes[:, 0::2], 0, self.shape[1])
-        # boxes[:, 1::2] = np.clip(boxes[:, 1::2], 0, self.shape[0])
-        # points[:, :, 0] = np.clip(points[:, :, 0], 0, self.shape[1])
-        # points[:, :, 1] = np.clip(points[:, :, 1], 0, self.shape[0])
-        # landmarks[:, :, 0] = np.clip(landmarks[:, :, 0], 0, self.shape[1])
-        # landmarks[:, :, 1] = np.clip(landmarks[:, :, 1], 0, self.shape[0])
-        # if self.asserting is True:
-        #     XPortraitExceptionAssert.assertNoFace(len(scores))
-        # self._number = len(scores)
-        # self._score = np.reshape(scores, (-1,))
-        # self._box = np.reshape(np.round(boxes).astype(np.int32), (-1, 4,))
-        # self._points = np.reshape(np.round(points).astype(np.int32), (-1, 5, 2))
-        # self._landmark = np.reshape(np.round(landmarks).astype(np.int32), (-1, 68, 2))
-        # self._radian = np.reshape(radians, (-1, 3))
-        # self._angles = np.reshape(angles, (-1,))
-        # self._age = np.reshape(age, (-1))
-        # self._sex = sex  # [str,]
-        #
         module = self._getModule('insightface')
         targets = 'source' if self.local() else 'json'
         data = module(bgr, targets=targets)
@@ -264,7 +232,9 @@ class XPortrait(XCache):
             scores = np.array([one['score'] for one in data])
             boxes = np.stack([one['bbox'] for one in data], axis=0)
             points = np.stack([one['kps'] for one in data], axis=0)
-            landmarks = np.stack([one['landmark_3d_68'][:, :2] for one in data], axis=0)
+            landmarks2d68 = np.stack([one['landmark_2d_106'][module.Index_106To68, :] for one in data], axis=0)
+            landmarks3d68 = np.stack([one['landmark_3d_68'] for one in data], axis=0)
+            landmarks2d106 = np.stack([one['landmark_2d_106'] for one in data], axis=0)
             radians = np.stack([one['pose'] for one in data], axis=0)[:, np.array([1, 2, 0], dtype=np.int32)] / 180 * np.pi
             age = np.stack([one['age'] for one in data], axis=0)
             sex = [one['sex'] for one in data]
@@ -273,68 +243,63 @@ class XPortrait(XCache):
             boxes[:, 1::2] = np.clip(boxes[:, 1::2], 0, self.shape[0])
             points[:, :, 0] = np.clip(points[:, :, 0], 0, self.shape[1])
             points[:, :, 1] = np.clip(points[:, :, 1], 0, self.shape[0])
-            landmarks[:, :, 0] = np.clip(landmarks[:, :, 0], 0, self.shape[1])
-            landmarks[:, :, 1] = np.clip(landmarks[:, :, 1], 0, self.shape[0])
+            landmarks2d68[:, :, 0] = np.clip(landmarks2d68[:, :, 0], 0, self.shape[1])
+            landmarks2d68[:, :, 1] = np.clip(landmarks2d68[:, :, 1], 0, self.shape[0])
         else:
             scores = np.zeros(shape=(0,), dtype=np.float32)
             boxes = np.zeros(shape=(0, 4), dtype=np.float32)
             points = np.zeros(shape=(0, 4, 2), dtype=np.float32)
-            landmarks = np.zeros(shape=(0, 68, 2), dtype=np.float32)
+            landmarks2d68 = np.zeros(shape=(0, 68, 2), dtype=np.float32)
+            landmarks3d68 = np.zeros(shape=(0, 68, 3), dtype=np.float32)
+            landmarks2d106 = np.zeros(shape=(0, 106, 2), dtype=np.float32)
             radians = np.zeros(shape=(0, 3), dtype=np.float32)
-        return scores, boxes, points, landmarks, radians
+            age = np.zeros(shape=(0,), dtype=np.float32)
+            sex = []
+        data_dict = dict(
+            _score=scores, _box=boxes, _points=points, _landmark=landmarks2d68, _radian=radians, _age=age, _sex=sex,
+            _landmarks3d68=landmarks3d68, _landmarks2d106=landmarks2d106)
+        return len(data), data_dict
 
     def inferenceWithRotation(self, bgr, image_angle=0):
         from ...geometry import GeoFunction
         if image_angle == 0:
-            scores, boxes, points, landmarks, radians = self._detect_handle(bgr)
-            angles = np.zeros(shape=len(scores), dtype=np.int32)
-            boxes = np.reshape(boxes, (-1, 4))
-            points = np.reshape(points, (-1, 5, 2))
-            landmarks = np.reshape(landmarks, (-1, 68, 2))
-            radians = np.reshape(radians, (-1, 3))
-            return scores, boxes, points, landmarks, radians, angles
+            count, data = self._detect_handle(bgr)
+            data['_box'] = np.reshape(data['_box'], (-1, 4))
+            data['_points'] = np.reshape(data['_points'], (-1, 5, 2))
+            data['_landmark'] = np.reshape(data['_landmark'], (-1, 68, 2))
+            data['_radian'] = np.reshape(data['_radian'], (-1, 3))
+            data['_angles'] = np.zeros(shape=count, dtype=np.int32)
+            return count, data
         if image_angle in GeoFunction.CVRotationDict:
             rot = cv2.rotate(bgr, GeoFunction.CVRotationDict[image_angle])
-            scores, boxes, points, landmarks, radians = self._detect_handle(rot)
+            count, data = self._detect_handle(rot)
             h, w, c = rot.shape
             angle_back = GeoFunction.rotateBack(image_angle)
-            boxes = GeoFunction.rotateBoxes(np.reshape(boxes, (-1, 4)), angle_back, h, w)
-            points = GeoFunction.rotatePoints(np.reshape(points, (-1, 5, 2)), angle_back, h, w)
-            landmarks = GeoFunction.rotatePoints(np.reshape(landmarks, (-1, 68, 2)), angle_back, h, w)
-            radians = np.reshape(radians, (-1, 3))
-            angles = np.ones(shape=len(scores), dtype=np.int32) * image_angle
-            return scores, boxes, points, landmarks, radians, angles
+            data['_box'] = GeoFunction.rotateBoxes(np.reshape(data['_box'], (-1, 4)), angle_back, h, w)
+            data['_points'] = GeoFunction.rotatePoints(np.reshape(data['_points'], (-1, 5, 2)), angle_back, h, w)
+            data['_landmark'] = GeoFunction.rotatePoints(np.reshape(data['_landmark'], (-1, 68, 2)), angle_back, h, w)
+            data['_radian'] = np.reshape(data['_radian'], (-1, 3))
+            data['_angles'] = np.ones(shape=count, dtype=np.int32) * image_angle
+            return count, data
         raise ValueError('angle {} not in [0,90,180,270]'.format(image_angle))
 
     def _detect(self, bgr):
-        scores_collect, boxes_collect, points_collect, \
-            landmarks_collect, radians_collect, angles_collect = [], [], [], [], [], []
+        data_list = []
         for value in self.rotations:
             assert isinstance(value, (int, float)), value
-            scores, boxes, points, landmarks, radians, angles = self.inferenceWithRotation(bgr, value)
-            if len(scores) > 0:
-                scores_collect.append(scores)
-                boxes_collect.append(boxes)
-                points_collect.append(points)
-                landmarks_collect.append(landmarks)
-                radians_collect.append(radians)
-                angles_collect.append(angles)
+            count, data = self.inferenceWithRotation(bgr, value)
+            if count > 0:
+                data_list.append(data)
         # NMS
-        if len(scores_collect) > 0:
-            scores = np.concatenate(scores_collect, axis=0)
-            boxes = np.concatenate(boxes_collect, axis=0)
-            points = np.concatenate(points_collect, axis=0)
-            landmarks = np.concatenate(landmarks_collect, axis=0)
-            radians = np.concatenate(radians_collect, axis=0)
-            angles = np.concatenate(angles_collect, axis=0)
-            keep = self.doNMS(scores, boxes, 0.3)
+        if len(data_list) > 0:
+            data_dict = dict()
+            data_keys = list(data_list[0].keys())
+            for key in data_keys:
+                data_dict[key] = np.concatenate([data[key] for data in data_list], axis=0)
+            keep = self.doNMS(data_dict['_score'], data_dict['_box'], 0.3)
             self._number = len(keep)
-            self._score = scores[keep]
-            self._box = boxes[keep]
-            self._points = points[keep]
-            self._landmark = landmarks[keep]
-            self._radian = radians[keep]
-            self._angles = angles[keep]
+            for key in data_keys:
+                setattr(self, key, data_dict[key][keep])
         else:
             self._number = 0
             self._score = np.zeros(shape=(0,), dtype=np.float32)

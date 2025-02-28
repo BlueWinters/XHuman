@@ -1,7 +1,7 @@
 
 from .libmasking_image import LibMaskingImage
 from .libmasking_video import LibMaskingVideo
-from .masking_function import MaskingFunction
+from .masking_options import MaskingOptions
 
 
 class LibMasking:
@@ -41,4 +41,4 @@ class LibMasking:
     """
     @staticmethod
     def getMaskingOption(*args, **kwargs):
-        return MaskingFunction.getMaskingOption(*args, **kwargs)
+        return MaskingOptions.getMaskingOption(*args, **kwargs)

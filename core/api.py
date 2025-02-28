@@ -48,7 +48,7 @@ def releaseModules(name:str=''):
     XManager.releaseModules(name)
 
 
-def getModules(names:Union[str, list]):
+def getModules(names: Union[str, list]):
     """
     获取指定的模块
     1.基本方法：
@@ -64,14 +64,15 @@ def getModules(names:Union[str, list]):
     return XManager.getModules(names)
 
 
-def getResultsFromCaller(name:str, *args, **kwargs):
+def getModuleFunction(name: str, function):
     """
     算法调用接口
     """
-
-    configLogging()
     module = getModules(name)
-    return module(*args, **kwargs)
+    handle = getattr(module, function)
+    if isinstance(handle, staticmethod):
+        logging.warning('{} is not staticmethod'.format(handle))
+    return handle
 
 
 def getResultsFromFunctions(name, function, *args, **kwargs):
@@ -128,6 +129,50 @@ def getResultsFromFunctions(name, function, *args, **kwargs):
         >>> path_video_out = 'path_video_out'
         >>> video_info_string = vido_info_string_to_save  # 加载vido_info_string_to_save保存的信息
         >>> num_workers = 4  # 并发处理数，原接口更名maskingVideoOld
+        >>> getResultsFromFunctions('face_masking', 'maskingVideo', bgr_input, masking_options_dict,
+        >>>     path_video_out, video_info_string=video_info_string, num_workers=num_workers
+
+    算法调用接口
+    - App算法：图片人脸打码V2
+        >>> import cv2, random, numpy
+        >>> # 1.获取人脸数量和人脸的小头像
+        >>> bgr_input = cv2.imread('path_to_image', cv2.IMREAD_COLOR)
+        >>> options_for_scanning_image = dict(category_list=['person', 'plate'], schedule_call=lambda *_args, **_kwargs: None)
+        >>> info_video = getResultsFromFunctions('face_masking', 'scanningImage', bgr_input, **options_for_scanning_image)
+        >>> preview_dict = info_video.getPreviewSummaryAsDict(size=256, is_bgr=True)  # 返回dict，key是人脸id(int)，value是一张人脸图片(array)，即{int: np.ndarray}
+        >>> data_string_to_save = info_video.getInfoJson()  # 返回中间信息(str)用于保存
+        >>> # 2.交互获得用户打码选择（给每个人赋一个打码类型）
+        >>> masking_options_dict = dict()
+        >>> for identity in list(preview_dict.keys()):
+        >>>     masking_options_dict[identity] = getResultsFromFunctions('face_masking', 'getMaskingOption', 'person_blur_gaussian')
+        >>>     masking_options_dict[identity] = getResultsFromFunctions('face_masking', 'getMaskingOption', 'person_blur_motion')
+        >>>     masking_options_dict[identity] = getResultsFromFunctions('face_masking', 'getMaskingOption', 'person_blur_water')
+        >>>     masking_options_dict[identity] = getResultsFromFunctions('face_masking', 'getMaskingOption', 'person_mosaic_square')
+        >>>     masking_options_dict[identity] = getResultsFromFunctions('face_masking', 'getMaskingOption', 'person_mosaic_polygon_small')
+        >>>     masking_options_dict[identity] = getResultsFromFunctions('face_masking', 'getMaskingOption', 'person_mosaic_polygon_small_line')
+        >>>     masking_options_dict[identity] = getResultsFromFunctions('face_masking', 'getMaskingOption', 'person_mosaic_polygon_big')
+        >>>     masking_options_dict[identity] = getResultsFromFunctions('face_masking', 'getMaskingOption', 'person_mosaic_polygon_big_line')
+        >>>     masking_options_dict[identity] = getResultsFromFunctions('face_masking', 'getMaskingOption', 'person_sticker_cartoon', sticker=image, box_tuple=np.array(...))
+        >>>     masking_options_dict[identity] = getResultsFromFunctions('face_masking', 'getMaskingOption', 'person_sticker_custom', sticker=image)
+        >>>     masking_options_dict[identity] = getResultsFromFunctions('face_masking', 'getMaskingOption', 'person_sticker_align_points', sticker=image, eyes_center_similarity=np.array(...))
+        >>>     masking_options_dict[identity] = getResultsFromFunctions('face_masking', 'getMaskingOption', 'plate_mosaic_square')
+        >>> # 3.获得结果
+        >>> video_info_string = data_string_to_save  # 加载vido_info_string_to_save保存的信息
+        >>> bgr_output:numpy.ndarray = getResultsFromFunctions(
+        >>>     'face_masking', 'maskingImage', bgr_input, masking_options_dict, video_info_string=video_info_string, with_hair=True)
+    - App算法：视频人脸打码V2
+        >>> # 1.获取人脸数量和人脸的小头像
+        >>> path_video_input = 'path_video_input'
+        >>> options_for_scanning_video = dict(category_list=['person', 'plate'], schedule_call=lambda *_args, **_kwargs: None)
+        >>> info_video = getResultsFromFunctions('face_masking', 'scanningVideo', path_video_input, path_out_json, **options_for_scanning_video)
+        >>> preview_dict = info_video.getPreviewSummaryAsDict(size=256, is_bgr=True)  # 返回dict，key是人脸id(int)，value是一个dict:包含box和对应帧的图片，
+        >>>                                                                          # 即{int: dict(box=box, image=np.ndarray, face=np.ndarray)}
+        >>> data_string_to_save = info_video.getInfoJson()  # 返回中间信息(str)用于保存
+        >>> # 2.交互获得用户打码选择（方法同上）
+        >>> # 3.获得结果
+        >>> path_video_out = 'path_video_out'
+        >>> video_info_string = data_string_to_save  # 加载vido_info_string_to_save保存的信息
+        >>> num_workers = 4  # 并发处理数
         >>> getResultsFromFunctions('face_masking', 'maskingVideo', bgr_input, masking_options_dict,
         >>>     path_video_out, video_info_string=video_info_string, num_workers=num_workers)
     """

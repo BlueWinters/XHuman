@@ -8,6 +8,7 @@ import json
 import dataclasses
 import typing
 import skimage
+import pickle
 from .scanning_visor import ScanningVisor
 from ..helper.cursor import AsynchronousCursor
 from ..helper.boundingbox import BoundingBox
@@ -124,7 +125,7 @@ class InfoVideo_PersonPreview:
         return min((rig - lft), (bot - top))
 
     def isValid(self) -> bool:
-        return isinstance(self.face_align_cache, XPortrait) and np.all(self.face_key_points_score[:3] >= 0.5)
+        return np.all(self.face_key_points_score[:3] >= 0.5)
 
     def summaryAsDict(self, size, is_bgr) -> dict:
         summary = dict(
@@ -141,7 +142,7 @@ class InfoVideo_PersonPreview:
             summary['image'] = np.copy(self.frame_bgr)
             summary['box'] = self.face_box.tolist()
             assert isinstance(self.face_align_cache, XPortrait), self.face_align_cache
-            summary['face'] = self.transformImage(self.face_align_cache.bgr, size, is_bgr)
+            summary['preview'] = self.transformImage(self.face_align_cache.bgr, size, is_bgr)
         return summary
 
     """
@@ -610,13 +611,24 @@ class InfoVideo:
 
     """
     """
-    def getIdentityPreviewDict(self, face_size_min=32, num_frame_min=30, size=256, is_bgr=True):
+    def getPreviewSummaryAsDict(self, face_size_min=32, num_frame_min=30, size=256, is_bgr=True):
         preview_dict = {}
         for person in self.getSortedHistory():
             logging.info(str(person))
             if person.checkPerson(face_size_min, num_frame_min) is True:
                 preview_dict[person.identity] = person.getPreviewSummary(size, is_bgr)
         return preview_dict
+
+    def getPreviewAsDict(self) -> dict:
+        return {person.identity: person.preview for person in self.person_identity_history}
+
+    def savePreviewAsPickle(self, path_out_pkl):
+        preview_dict = self.getPreviewSummaryAsDict()
+        pickle.dump(preview_dict, open(path_out_pkl, 'wb'))
+
+    @staticmethod
+    def loadPreviewFromPickle(path_in_pkl):
+        return pickle.load(open(path_in_pkl, 'rb'))
 
     """
     """

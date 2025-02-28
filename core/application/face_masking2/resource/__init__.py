@@ -35,3 +35,14 @@ def packageStickerAlignBox(align_type):
         bgr = Resource.loadImage('{}/{}'.format(path_sticker, name))
         data.append({'sticker': bgr})
     return data
+
+
+def getResourceStickerCustom(prefix):
+    path_sticker = '{}/custom'.format(os.path.split(__file__)[0])
+    file_name_list = sorted(os.listdir(path_sticker))
+    prefix_name_list = [name.split('.')[0] for name in file_name_list]
+    # assert prefix in prefix_name_list, (prefix, prefix_name_list)
+    index = prefix_name_list.index(prefix)
+    name = file_name_list[index]
+    bgr = Resource.loadImage('{}/{}'.format(path_sticker, name))
+    return bgr

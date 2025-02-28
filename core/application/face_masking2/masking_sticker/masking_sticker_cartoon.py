@@ -5,8 +5,7 @@ import cv2
 import numpy as np
 import skimage
 from .masking_sticker import MaskingSticker
-from ..scanning.scanning_video import InfoVideo_PersonPreview
-from ..helper.masking_helper import MaskingHelper
+from ..helper.boundingbox import BoundingBox
 from ....geometry import GeoFunction
 
 
@@ -33,6 +32,18 @@ class MaskingStickerCartoon(MaskingSticker):
     def __str__(self):
         return '{}(sticker={}, box_ori={}, box_fmt={})'.format(
             self.NameEN, self.sticker.shape, self.box_ori, self.box_fmt)
+
+    def refineStickerKeyPoints(self, face_key_points_xy):
+        if hasattr(self, 'eyes_key_points') is False:
+            h, w, c = self.sticker.shape
+            lft, top, rig, bot = self.box_fmt
+            sw = rig - lft
+            sh = bot - top
+            eyes_key_points = np.stack([face_key_points_xy[2, :], face_key_points_xy[1, :]], axis=0)  # 2,2
+            eyes_key_points[:, 0] = np.round((eyes_key_points[:, 0] - lft) / sw * w).astype(np.int32)
+            eyes_key_points[:, 1] = np.round((eyes_key_points[:, 1] - top) / sh * w).astype(np.int32)
+            self.eyes_key_points = eyes_key_points
+        return self.eyes_key_points
 
     def warpSticker(self, source_bgr, src_pts, dst_pts):
         h, w, c = source_bgr.shape
@@ -69,16 +80,35 @@ class MaskingStickerCartoon(MaskingSticker):
         return np.round(fusion_bgr).astype(np.uint8)
 
     def inferenceOnMaskingVideo(self, source_bgr, canvas_bgr, face_box, face_points_xy, face_points_score, **kwargs):
-        preview = kwargs['preview']
-        assert isinstance(preview, InfoVideo_PersonPreview), preview
-        if face_points_score[2] > 0.5 and face_points_score[1] > 0.5:
-            points_eyes_preview = np.stack([preview.face_key_points_xy[2, :], preview.face_key_points_xy[1, :]], axis=0)
-            points_eyes_current = np.stack([face_points_xy[2, :], face_points_xy[1, :]], axis=0)
-            sticker_warped_bgr, sticker_warped_alpha = self.warpSticker(
-                source_bgr, points_eyes_preview, points_eyes_current)
-            fusion_bgr = MaskingHelper.workOnSelectedMask(
-                canvas_bgr, sticker_warped_bgr, sticker_warped_alpha, mask_blur_k=None)
-            return fusion_bgr
-        else:
+        # if face_points_score[2] > 0.5 and face_points_score[1] > 0.5:
+        #     preview = kwargs['preview']
+        #     assert isinstance(preview, InfoVideo_PersonPreview), preview
+        #     points_eyes_sticker = self.refineStickerKeyPoints(preview.face_key_points_xy)
+        #     points_eyes_current = np.stack([face_points_xy[2, :], face_points_xy[1, :]], axis=0)
+        #     sticker_warped_bgr, sticker_warped_alpha = self.warpSticker(
+        #         source_bgr, points_eyes_sticker, points_eyes_current)
+        #     fusion_bgr = MaskingHelper.workOnSelectedMask(
+        #         canvas_bgr, sticker_warped_bgr, sticker_warped_alpha, mask_blur_k=None)
+        #     return fusion_bgr
+        # else:
+        #     return canvas_bgr
+
+        h, w, c = source_bgr.shape
+        box_remap = BoundingBox.remapBBox(self.box_ori, self.box_fmt, face_box)
+        lft, top, rig, bot = BoundingBox(np.array(box_remap, dtype=np.int32)).clip(0, 0, w, h).decouple()
+        h = bot - top
+        w = rig - lft
+        st_x, st_y, st_w, st_h = cv2.boundingRect(self.sticker[:, :, 3])
+        if st_w == 0 or st_h == 0:
             return canvas_bgr
+        sticker_image = self.sticker[st_y:st_y + st_h, st_x:st_x + st_w, ...]
+        resized_sticker = cv2.resize(sticker_image, (w, h))
+        sticker_bgr = resized_sticker[:, :, :3]
+        sticker_mask = resized_sticker[:, :, 3:4]
+        part = canvas_bgr[top:bot, lft:rig, :]
+        mask = sticker_mask.astype(np.float32) / 255.
+        fusion = part * (1 - mask) + sticker_bgr * mask
+        fusion_bgr = np.round(fusion).astype(np.uint8)
+        canvas_bgr[top:bot, lft:rig, :] = fusion_bgr
+        return canvas_bgr
 

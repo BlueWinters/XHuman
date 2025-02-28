@@ -19,7 +19,7 @@ class MaskingMosaicSquare(MaskingMosaic):
 
     """
     """
-    def __init__(self, num_pixels=20, align_type='head', *args, **kwargs):
+    def __init__(self, num_pixels=10, align_type='head', *args, **kwargs):
         super(MaskingMosaicSquare, self).__init__(*args, **kwargs)
         assert num_pixels > 0, num_pixels
         self.nh = num_pixels

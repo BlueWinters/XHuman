@@ -21,13 +21,14 @@ class MaskingBlur:
     """
     """
     def __init__(self, *args, **kwargs):
-        pass
+        self.fmt_w = kwargs.pop('fmt_w', 256)
+        self.fmt_h = kwargs.pop('fmt_h', 256)
 
     def __del__(self):
         pass
 
-    def inference(self, *args, **kwargs):
-        pass
+    def inference(self, *args, **kwargs) -> np.ndarray:
+        raise NotImplementedError
 
     def inferenceOnMaskingImage(self, source_bgr, canvas_bgr, angle, box, mask_info, **kwargs):
         if isinstance(mask_info, dict):
@@ -39,7 +40,7 @@ class MaskingBlur:
             st_x, st_y, st_w, st_h = cv2.boundingRect(mask)
             lft, top, rig, bot = st_x, st_y, st_x + st_w, st_y + st_h
         part = source_bgr[top:bot, lft:rig, ...]
-        resized = cv2.resize(part, (256, 256))
+        resized = cv2.resize(part, (self.fmt_w, self.fmt_h))
         blured = self.inference(resized)
         copy_bgr = np.copy(source_bgr)
         copy_bgr[top:bot, lft:rig, ...] = cv2.resize(blured, part.shape[:2][::-1])
@@ -52,7 +53,7 @@ class MaskingBlur:
             mask = mask_info['mask']
             lft, top, rig, bot = mask_info['box']
             part = source_bgr[top:bot, lft:rig, ...]
-            resized = cv2.resize(part, (256, 256))
+            resized = cv2.resize(part, (self.fmt_w, self.fmt_h))
             blured = self.inference(resized)
             copy_bgr = np.copy(source_bgr)
             copy_bgr[top:bot, lft:rig, ...] = cv2.resize(blured, part.shape[:2][::-1])

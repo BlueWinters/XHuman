@@ -23,9 +23,12 @@ class LibUltralyticsWrapper:
     """
     CheckpointBase = 'thirdparty/ultralytics'
     ModelList = [
+        # official
         'yolo11n',  # 'yolo11s', 'yolo11m', 'yolo11l', 'yolo11x',
         'yolo11n-pose', 'yolo11m-pose', 'yolo11x-pose',  # 'yolo11s-pose', 'yolo11m-pose', 'yolo11l-pose',
         'yolo11n-seg', 'yolo11m-seg', 'yolo11x-seg',
+        # others
+        'yolo8s-plate.pt',
     ]
 
     def __init__(self, *args, **kwargs):

@@ -1,14 +1,11 @@
-import functools
+
 import logging
 import os
 import cv2
 import tqdm
 import numpy as np
-from .masking_function import MaskingFunction
-from .scanning.scanning_video import InfoVideo
-from .helper.cursor import AsynchronousCursor
+from .scanning import InfoVideo
 from .masking_mthread_worker import MaskingVideoSession, MaskingVideoWorker
-from .helper.masking_helper import MaskingHelper
 from ...utils import XVideoReader, XVideoWriter, Resource, XContextTimer
 
 
@@ -47,7 +44,7 @@ class LibMaskingVideo:
                 writer = XVideoWriter(reader.desc(True))
                 writer.open(path_out_video)
                 cursor_list = info_video.getInfoCursorList(len(reader), 1, min_frames)[0]['cursor_list']
-                preview_dict = info_video.getIdentityPreviewDict(size=0, is_bgr=None)
+                preview_dict = info_video.getPreviewAsDict()
                 for frame_index, frame_bgr in enumerate(reader):
                     canvas_bgr = MaskingVideoWorker.maskingFunction(
                         frame_index, frame_bgr, cursor_list, options_dict, with_hair, preview_dict)
@@ -60,7 +57,7 @@ class LibMaskingVideo:
             with XContextTimer(True):
                 assert num_workers > 0, num_workers
                 cursor_list = info_video.getInfoCursorList(len(reader), num_workers, min_frames)
-                preview_dict = info_video.getIdentityPreviewDict(size=0, is_bgr=None)
+                preview_dict = info_video.getPreviewAsDict()
                 session = MaskingVideoSession(
                     num_workers, path_in_video, options_dict, cursor_list, schedule_call,
                     with_hair=with_hair, preview_dict=preview_dict, debug_mode=debug_mode)
