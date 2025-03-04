@@ -5,7 +5,7 @@ import cv2
 import numpy as np
 from .masking_function import MaskingFunction
 from .helper.masking_helper import MaskingHelper
-from .scanning import InfoImage, InfoImage_Person
+from .scanning import InfoImage
 from ...utils import Resource, XContextTimer
 
 

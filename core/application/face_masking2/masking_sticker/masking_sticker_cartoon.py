@@ -57,11 +57,14 @@ class MaskingStickerCartoon(MaskingSticker):
     def inference(self, bgr, *args, **kwargs):
         raise NotImplementedError
 
-    def inferenceOnMaskingImage(self, source_bgr, canvas_bgr, angle, box, landmark, **kwargs):
-        if 'auto_rot' in kwargs and kwargs['auto_rot'] is True:
+    def inferenceOnMaskingImage(self, source_bgr, canvas_bgr, **kwargs):
+        angle = kwargs['angle']
+        # box = kwargs['box']
+        auto_rot = kwargs['auto_rot']
+        if auto_rot is True:
             angle_back = GeoFunction.rotateBack(angle)
             sticker = GeoFunction.rotateImage(self.sticker, angle_back)
-            box = GeoFunction.rotateBoxes(box, angle, source_bgr.shape[0], source_bgr.shape[1])
+            # box = GeoFunction.rotateBoxes(box, angle, source_bgr.shape[0], source_bgr.shape[1])
             source_rot_bgr = GeoFunction.rotateImage(source_bgr, angle)
             ltrb = GeoFunction.rotateBoxes(self.box_fmt, angle_back, source_rot_bgr.shape[0], source_rot_bgr.shape[1])
         else:
@@ -79,7 +82,7 @@ class MaskingStickerCartoon(MaskingSticker):
         fusion_bgr = canvas_sticker * multi + (1 - multi) * canvas_bgr
         return np.round(fusion_bgr).astype(np.uint8)
 
-    def inferenceOnMaskingVideo(self, source_bgr, canvas_bgr, face_box, face_points_xy, face_points_score, **kwargs):
+    def inferenceOnMaskingVideo(self, source_bgr, canvas_bgr, **kwargs):
         # if face_points_score[2] > 0.5 and face_points_score[1] > 0.5:
         #     preview = kwargs['preview']
         #     assert isinstance(preview, InfoVideo_PersonPreview), preview
@@ -93,6 +96,7 @@ class MaskingStickerCartoon(MaskingSticker):
         # else:
         #     return canvas_bgr
 
+        face_box = kwargs.pop('face_box')
         h, w, c = source_bgr.shape
         box_remap = BoundingBox.remapBBox(self.box_ori, self.box_fmt, face_box)
         lft, top, rig, bot = BoundingBox(np.array(box_remap, dtype=np.int32)).clip(0, 0, w, h).decouple()

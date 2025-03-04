@@ -31,11 +31,14 @@ class LibMasking:
     """
     @staticmethod
     def scanningVideo(*args, **kwargs):
-        return LibMaskingVideo.scanningVideo(*args, **kwargs)
+        masking_video = LibMaskingVideo()
+        masking_video.scanningVideo(*args, **kwargs)
+        return masking_video
 
     @staticmethod
     def maskingVideo(*args, **kwargs):
-        return LibMaskingVideo.maskingVideo(*args, **kwargs)
+        masking_video = LibMaskingVideo.createFromScanningDict(**kwargs)
+        return masking_video.maskingVideo(*args, **kwargs)
 
     """
     """

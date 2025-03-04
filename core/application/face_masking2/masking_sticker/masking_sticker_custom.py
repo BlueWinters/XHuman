@@ -4,6 +4,7 @@ import os
 import cv2
 import numpy as np
 from .masking_sticker import MaskingSticker
+from ..helper import BoundingBox
 
 
 class MaskingStickerCustom(MaskingSticker):
@@ -27,7 +28,7 @@ class MaskingStickerCustom(MaskingSticker):
         return '{}(sticker={})'.format(self.NameEN, self.sticker.shape)
 
     def inference(self, source_bgr, canvas_bgr, box, *args, **kwargs):
-        lft, top, rig, bot = box
+        lft, top, rig, bot = BoundingBox(box).toSquare().asInt()
         h = bot - top
         w = rig - lft
         if self.sticker.shape[2] == 3:
@@ -45,8 +46,8 @@ class MaskingStickerCustom(MaskingSticker):
             return canvas_bgr
         raise NotImplementedError
 
-    def inferenceOnMaskingImage(self, source_bgr, canvas_bgr, box, *args, **kwargs):
-        return self.inference(source_bgr, canvas_bgr, box)
+    def inferenceOnMaskingImage(self, source_bgr, canvas_bgr, *args, **kwargs):
+        return self.inference(source_bgr, canvas_bgr, kwargs.pop('box'))
 
-    def inferenceOnMaskingVideo(self, source_bgr, canvas_bgr, box, *args, **kwargs):
-        return self.inference(source_bgr, canvas_bgr, box)
+    def inferenceOnMaskingVideo(self, source_bgr, canvas_bgr, *args, **kwargs):
+        return self.inference(source_bgr, canvas_bgr, kwargs.pop('box'))

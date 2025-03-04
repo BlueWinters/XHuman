@@ -5,7 +5,7 @@ import cv2
 import numpy as np
 import skimage
 from .masking_sticker import MaskingSticker
-from ..scanning.scanning_video import InfoVideo_PersonPreview
+# from ..scanning import InfoVideo_PersonPreview
 from ..helper.masking_helper import MaskingHelper
 from ....geometry import GeoFunction
 
@@ -79,7 +79,7 @@ class MaskingStickerAlignBoxStatic(MaskingSticker):
 
     def inferenceOnMaskingVideo(self, source_bgr, canvas_bgr, face_box, face_points_xy, face_points_score, **kwargs):
         preview = kwargs['preview']
-        assert isinstance(preview, InfoVideo_PersonPreview), preview
+        # assert isinstance(preview, InfoVideo_PersonPreview), preview
         if face_points_score[2] > 0.5 and face_points_score[1] > 0.5:
             sticker_warped_bgr, sticker_warped_alpha = self.warpSticker(
                 source_bgr, preview.face_key_points_xy[:2, :2], face_points_xy[:2, :2])

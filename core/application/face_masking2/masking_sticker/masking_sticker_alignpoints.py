@@ -46,6 +46,9 @@ class MaskingStickerAlignPoints(MaskingSticker):
         if 'eyes_center_similarity' in kwargs:
             self.align_type = 'eyes_center_similarity'
             self.points = np.reshape(np.array(kwargs['eyes_center_similarity'], dtype=np.int32), (2, 2))
+        if 'mouth_corners_similarity' in kwargs:
+            self.align_type = 'mouth_corners_similarity'
+            self.points = np.reshape(np.array(kwargs['mouth_corners_similarity'], dtype=np.int32), (2, 2))
 
     def __str__(self):
         return '{}(sticker={}, align_type={}, points={})'.format(
@@ -75,6 +78,27 @@ class MaskingStickerAlignPoints(MaskingSticker):
                 dst_pts[:, 0] += lft
                 dst_pts[:, 1] += top
             return self.points, dst_pts
+        # mouth_corners: 2 points, corners of mouth
+        if self.align_type == 'mouth_corners_similarity':
+            if isinstance(points, np.ndarray):
+                assert len(points.shape) == 2 and points.shape[1] == 2, points.shape  # 5,2 or 68,2 or 2,2
+                if points.shape[0] == 68:
+                    lft = np.mean(points[48:49, :], axis=0, keepdims=True)
+                    rig = np.mean(points[54:55, :], axis=0, keepdims=True)
+                    dst_pts = np.concatenate([lft, rig], axis=0)
+                else:
+                    assert points.shape[0] == 5 or points.shape[0] == 2, points.shape
+                    dst_pts = points[3:5, :]
+            else:
+                cache = XPortrait(bgr[top:bot, lft:rig, :], strategy='area', asserting=True)
+                landmark = cache.landmark[0]
+                lft = np.mean(landmark[48:49, :], axis=0, keepdims=True)
+                rig = np.mean(landmark[54:55, :], axis=0, keepdims=True)
+                dst_pts = np.concatenate([lft, rig], axis=0)
+                dst_pts[:, 0] += lft
+                dst_pts[:, 1] += top
+            return self.points, dst_pts
+
         raise NotImplementedError(self.align_type)
 
     def warpSticker(self, source_bgr, box, points, expand=0.2):

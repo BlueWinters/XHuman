@@ -5,8 +5,10 @@ import numpy as np
 import skimage
 from .cursor import AsynchronousCursor
 from .angle_helper import AngleHelper
-from ..scanning import InfoImage, InfoImage_Person, InfoImage_Plate
-from ..scanning import InfoVideo, InfoVideo_Person, InfoVideo_Frame
+# from ..scanning.infoimage_plate import InfoImage_Plate
+# from ..scanning.infoimage_person import InfoImage_Person
+from ..scanning.scanning_image import InfoImage, InfoImage_Person, InfoImage_Plate
+from ..scanning.infovideo_person import InfoVideo_Person, InfoVideo_Person_Frame
 from ....base import XPortrait, XPortraitHelper
 from ....geometry import Rectangle, GeoFunction
 from .... import XManager
@@ -169,21 +171,23 @@ class MaskingHelper:
             masks = [cv2.resize(result_masks[n, :, :], (w, h)) for n in range(len(result_masks))]
         # main pipeline
         mask_dict = dict()
-        for n, (person, cursor) in enumerate(cursor_list):
-            assert isinstance(person, InfoVideo_Person), person
+        for n, (info_object, cursor) in enumerate(cursor_list):
+            if info_object.identity not in option_dict:
+                continue
+            if option_dict[info_object.identity].NameEN.startswith('sticker'):
+                mask_dict[info_object.identity] = None
+                continue
+            if isinstance(info_object, InfoVideo_Person) is False:
+                continue
+            # get mask
             assert isinstance(cursor, AsynchronousCursor), cursor
             frame_info = cursor.current()
-            assert isinstance(frame_info, InfoVideo_Frame), frame_info
+            assert isinstance(frame_info, InfoVideo_Person_Frame), frame_info
             if frame_info.frame_index == frame_index:
-                if person.identity not in option_dict:
-                    continue
-                if option_dict[person.identity].NameEN.startswith('sticker'):
-                    mask_dict[person.identity] = None
-                    continue
                 if np.sum(frame_info.box_face) == 0:
-                    mask_dict[person.identity] = None
+                    mask_dict[info_object.identity] = None
                     logging.info('skip --> frame_index-{}, person_identity-{}, person_face_box-{}'.format(
-                        frame_index, person.identity, frame_info.box_face))
+                        frame_index, info_object.identity, frame_info.box_face))
                     continue  # invalid face box
                 # expand the face box
                 lft, top, rig, bot = Rectangle(frame_info.box_face).expand(0.8, 0.8).clip(0, 0, w, h).asInt()
@@ -217,14 +221,14 @@ class MaskingHelper:
                 part_mask_single = MaskingHelper.getSingleConnectedRegion(part_mask) * 255
                 mask = np.zeros(shape=(h, w), dtype=np.uint8)
                 mask[top:bot, lft:rig] = part_mask_single
-                mask_dict[person.identity] = dict(mask=mask, box=(lft, top, rig, bot))
+                mask_dict[info_object.identity] = dict(mask=mask, box=(lft, top, rig, bot))
         return mask_dict
 
     @staticmethod
     def getPortraitMaskingWithInfoVideo(frame_index, frame_bgr, person, frame_info, option_dict, with_hair=True):
         h, w, c = frame_bgr.shape
         assert isinstance(person, InfoVideo_Person), person
-        assert isinstance(frame_info, InfoVideo_Frame), frame_info
+        assert isinstance(frame_info, InfoVideo_Person_Frame), frame_info
         assert person.identity in option_dict, (person.identity, str(option_dict))
         if frame_info.frame_index == frame_index:
             if option_dict[person.identity].NameEN.startswith('sticker'):

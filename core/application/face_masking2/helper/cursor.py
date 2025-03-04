@@ -1,4 +1,6 @@
 
+import numpy as np
+
 
 class AsynchronousCursor:
     def __init__(self, data, beg=None, end=None):
@@ -21,3 +23,4 @@ class AsynchronousCursor:
 
     def __str__(self):
         return '{} - {}, {} == {}'.format(self.index, self.beg, self.end, len(self.data))
+
