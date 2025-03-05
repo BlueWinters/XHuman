@@ -20,6 +20,8 @@ class ScanningVideo:
         raise NotImplementedError
 
     def __init__(self, **kwargs):
+        # video reader
+        self.reader = None
         self.object_identity_seq = kwargs.pop('object_identity_seq', -1)
         self.object_num_max = kwargs.pop('person_num_max', -1)
         self.object_identity_history = []
@@ -34,6 +36,10 @@ class ScanningVideo:
     tracking
     """
     def doScanning(self, path_in_video, schedule_call, online=True):
+        if isinstance(self.reader, XVideoReader) is False:
+            self.reader = XVideoReader(path_in_video)
+            assert self.reader.isOpen(), path_in_video
+        # tracking
         if online is True:
             return self.doScanningOnline(path_in_video, schedule_call)
         else:
@@ -45,23 +51,23 @@ class ScanningVideo:
             result = module.track(path_in_video, **self.tracking_config)
             assert isinstance(result, list)
             # review the result
-            reader = XVideoReader(path_in_video)
+            self.reader.resetPositionByIndex(0)
             for n in range(len(result)):
-                flag, frame_bgr = reader.read()
+                flag, frame_bgr = self.reader.read()
                 if flag is True:
                     self.updateWithYOLO(n, frame_bgr, result[n])
-                schedule_call('扫描视频-运行中', float((n + 1) / len(reader)))
+                schedule_call('扫描视频-运行中', float((n + 1) / len(self.reader)))
             self.finishTracking()
             XManager.getModules('ultralytics').resetTracker(self.tracking_model)
             return len(self.object_identity_history)
 
     def doScanningOnline(self, path_in_video, schedule_call):
         module = XManager.getModules('ultralytics')[self.tracking_model]
-        reader = XVideoReader(path_in_video)
-        for n, frame_bgr in enumerate(reader):
+        self.reader.resetPositionByIndex(0)
+        for n, frame_bgr in enumerate(self.reader):
             result = module.track(frame_bgr, **self.tracking_config)[0]
             self.updateWithYOLO(n, frame_bgr, result)
-            schedule_call('扫描视频-运行中', float((n + 1) / len(reader)))
+            schedule_call('扫描视频-运行中', float((n + 1) / len(self.reader)))
         self.finishTracking()
         XManager.getModules('ultralytics').resetTracker(self.tracking_model)
         return len(self.object_identity_history)

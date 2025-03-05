@@ -1,4 +1,4 @@
-
+import copy
 import logging
 import cv2
 import numpy as np
@@ -177,6 +177,7 @@ class InfoVideo_Person:
         self.activate = True
         self.preview = None
         self.frame_info_list: typing.List[InfoVideo_Person_Frame] = []  # [InfoVideo_Frame]
+        self.num_valid_frames = 0
         self.smooth_box_tracker = 0.8
         self.smooth_box_face = 0.8
         # for yolo
@@ -234,6 +235,7 @@ class InfoVideo_Person:
             bbox = BoundingBox(box_face)
             face_size = min(bbox.width, bbox.height)
             self.face_size_max = int(max(face_size, self.face_size_max))
+            self.num_valid_frames += 1
         else:
             assert len(self.frame_info_list) > 0
             info_last = self.frame_info_list[-1]
@@ -243,7 +245,7 @@ class InfoVideo_Person:
                     frame_index=frame_index, box_track=box_track, box_face=box_face,
                     key_points_xy=key_points_xy, key_points_score=key_points_score, box_copy=True))
         # enforce to smoothing
-        self.smoothing()
+        # self.smoothing()
         self.setIdentityPreview(frame_index, frame_bgr, key_points, box_face)
 
     def getLastInfo(self) -> InfoVideo_Person_Frame:
@@ -283,7 +285,7 @@ class InfoVideo_Person:
                 if face_align_cache.number > 0:
                     preview = InfoVideo_Person_Preview(frame_index, frame_bgr, face_box, key_points[:5, :], face_align_cache)
                     if preview.face_score > self.preview.face_score:
-                        logging.info('identity={}, {} --> {}'.format(self.identity, self.preview, preview))
+                        logging.info('identity={}, ({} --> {})'.format(self.identity, self.preview, preview))
                         self.preview = preview  # just update
             else:
                 pass  # nothing to do
@@ -293,7 +295,7 @@ class InfoVideo_Person:
         return self.preview.summaryAsDict(size, is_bgr)
 
     def checkPerson(self, face_size_min, num_frame_min) -> bool:
-        person_frame_valid = bool(self.face_size_max > face_size_min and len(self) > num_frame_min)
+        person_frame_valid = bool(self.face_size_max > face_size_min and self.num_valid_frames > num_frame_min)
         person_preview_valid = self.preview.isValid()
         return bool(person_frame_valid and person_preview_valid)
 
@@ -307,6 +309,52 @@ class InfoVideo_Person:
             return AsynchronousCursor(self.frame_info_list, beg_pre_idx, end_aft_idx)
         else:
             return AsynchronousCursor(self.frame_info_list, 0, 0)
+
+    def interpolateFramesAtGap(self, max_frame_gap):
+        assert isinstance(max_frame_gap, int) and max_frame_gap > 0, max_frame_gap
+        n = 0
+        while n < len(self.frame_info_list)-1:
+            info1 = self.frame_info_list[n]
+            info2 = self.frame_info_list[n+1]
+            if info1.frame_index+1 < info2.frame_index and info1.frame_index+max_frame_gap >= info2.frame_index:
+                index_beg = info1.frame_index + 1
+                index_end = info2.frame_index
+                array = np.linspace(0, 1, index_end - index_beg + 2, dtype=np.float32)[1:-1]
+                key_points_flag = (info1.key_points_score > 0.5).astype(np.int32) * (info2.key_points_score > 0.5).astype(np.int32)
+                for i, idx in enumerate(range(index_beg, index_end)):
+                    r = float(array[i])
+                    frame_index = idx
+                    box_track = (r * info1.box_track + (1 - r) * info2.box_track).astype(np.int32)
+                    box_face = (r * info1.box_face + (1 - r) * info2.box_face).astype(np.int32)
+                    key_points_xy = (r * info1.key_points_xy + (1 - r) * info2.key_points_xy).astype(np.float32) * key_points_flag[:, None]
+                    key_points_score = (r * info1.key_points_score + (1 - r) * info2.key_points_score).astype(np.float32) * key_points_flag
+                    self.frame_info_list.insert(n+1+i, InfoVideo_Person_Frame(
+                        frame_index=frame_index, box_track=box_track, box_face=box_face,
+                        key_points_xy=key_points_xy, key_points_score=key_points_score, box_copy=True))
+                    logging.info('interpolate frames: identity-{}, insert {} into ({}, {}), ({}, {}, {})'.format(
+                        self.identity, frame_index, index_beg, index_end,
+                        np.round(key_points_score*100).astype(np.int32),
+                        np.round(info1.key_points_score*100).astype(np.int32),
+                        np.round(info2.key_points_score*100).astype(np.int32)))
+                n += index_end - index_beg
+            else:
+                n += 1
+
+    def interpolateFramesBegAndEnd(self, num_interp_beg, num_interp_end, num_frames):
+        assert isinstance(num_interp_beg, int) and isinstance(num_interp_end, int)
+        assert num_interp_beg >= 0 and num_interp_end >= 0, (num_interp_beg, num_interp_end)
+        for n in range(num_interp_beg):
+            if self.frame_info_list[0].frame_index > 1:
+                info_frame = copy.deepcopy(self.frame_info_list[0])
+                info_frame.frame_index -= 1
+                info_frame.box_copy = True
+                self.frame_info_list.insert(0, info_frame)
+        for n in range(num_interp_end):
+            if self.frame_info_list[-1].frame_index < num_frames:
+                info_frame = copy.deepcopy(self.frame_info_list[-1])
+                info_frame.frame_index += 1
+                info_frame.box_copy = True
+                self.frame_info_list.append(info_frame)
 
 
 class ScanningVideo_Person(ScanningVideo):
@@ -342,6 +390,7 @@ class ScanningVideo_Person(ScanningVideo):
     """
     def finishTracking(self):
         self.updateObjectList([])
+        self.interpolateFrame()
         self.concatenateIdentity()
 
     def updateWithYOLO(self, frame_index, frame_bgr, result):
@@ -444,6 +493,19 @@ class ScanningVideo_Person(ScanningVideo):
             if person.yolo_identity == identity:
                 return n
         return -1
+
+    """
+    interpolate frames
+    """
+    def interpolateFrame(self, max_frame_gap=16, num_interp_beg=0, num_interp_end=0):
+        # interpolate frames into inner gap
+        for n, person in enumerate(self.object_identity_history):
+            assert isinstance(person, InfoVideo_Person), person
+            person.interpolateFramesAtGap(max_frame_gap)
+        # interpolate frames at begin and end
+        for n, person in enumerate(self.object_identity_history):
+            assert isinstance(person, InfoVideo_Person), person
+            person.interpolateFramesBegAndEnd(num_interp_beg, num_interp_end, len(self.reader))
 
     """
     merge person by face embedding
@@ -550,7 +612,7 @@ class ScanningVideo_Person(ScanningVideo):
     visual
     """
     def visualVideoScanning(self, frame_index, frame_canvas, cursor_list, **kwargs):
-        from ..scanning.scanning_visor import ScanningVisor
+        from ..visor import Visor
         vis_box_rot = kwargs.pop('vis_box_rot', True)
         for n, (person, cursor) in enumerate(cursor_list):
             info: InfoVideo_Person_Frame = cursor.current()
@@ -558,9 +620,9 @@ class ScanningVideo_Person(ScanningVideo):
                 if vis_box_rot is True:
                     key_points = np.concatenate([info.key_points_xy, info.key_points_score[:, None]], axis=1)
                     box_face, box_face_rot = AlignHelper.transformPoints2FaceBox(frame_canvas, key_points, None)
-                    ScanningVisor.visualSinglePerson(frame_canvas, person.identity, info.box_track, box_face_rot, info.key_points)
+                    frame_canvas = Visor.visualSinglePerson(frame_canvas, person.identity, info.box_track, box_face_rot, info.key_points)
                 else:
-                    ScanningVisor.visualSinglePerson(frame_canvas, person.identity, info.box_track, info.box_face, info.key_points)
+                    frame_canvas = Visor.visualSinglePerson(frame_canvas, person.identity, info.box_track, info.box_face, info.key_points)
                 cursor.next()
         return frame_canvas
 

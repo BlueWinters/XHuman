@@ -28,7 +28,8 @@ class MaskingStickerCustom(MaskingSticker):
         return '{}(sticker={})'.format(self.NameEN, self.sticker.shape)
 
     def inference(self, source_bgr, canvas_bgr, box, *args, **kwargs):
-        lft, top, rig, bot = BoundingBox(box).toSquare().asInt()
+        sh, sw, c = source_bgr.shape
+        lft, top, rig, bot = BoundingBox(box).toSquare().clip(0, 0, sw, sh).asInt()
         h = bot - top
         w = rig - lft
         if self.sticker.shape[2] == 3:

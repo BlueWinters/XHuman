@@ -270,10 +270,10 @@ class ScanningVideo_Plate(ScanningVideo):
     visual
     """
     def visualVideoScanning(self, frame_index, frame_canvas, cursor_list, **kwargs):
-        from ..scanning.scanning_visor import ScanningVisor
+        from ..visor import Visor
         for n, (info_object, cursor) in enumerate(cursor_list):
             info: InfoVideo_Plate_Frame = cursor.current()
             if info.frame_index == frame_index:
-                ScanningVisor.visualSinglePlate(frame_canvas, info_object.identity, '', box=info.box_track)
+                Visor.visualSinglePlate(frame_canvas, info_object.identity, '', box=info.box_track)
                 cursor.next()
         return frame_canvas
