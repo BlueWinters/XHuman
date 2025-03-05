@@ -21,8 +21,6 @@ class MaskingOptions:
         MaskingMosaicPolygon.NameEN: MaskingMosaicPolygon,
         # mask-sticker
         MaskingStickerAlignPoints.NameEN: MaskingStickerAlignPoints,
-        MaskingStickerAlignBoxStatic.NameEN: MaskingStickerAlignBoxStatic,
-        MaskingStickerAlignBoxDynamic.NameEN: MaskingStickerAlignBoxDynamic,
         MaskingStickerCartoon.NameEN: MaskingStickerCartoon,
     }
 
@@ -42,8 +40,6 @@ class MaskingOptions:
         206: MaskingMosaicPolygon.parameterize(n_div=16, visual_boundary=False),  # mosaic_pixel_polygon_big
         # mask-sticker
         301: MaskingStickerAlignPoints.parameterize(),
-        302: MaskingStickerAlignBoxStatic.parameterize(),
-        303: MaskingStickerAlignBoxDynamic.parameterize(),
         304: MaskingStickerCartoon.parameterize(),
         311: MaskingStickerAlignPoints.parameterize(resource=('eyes_center_affine', '01')),
         312: MaskingStickerAlignPoints.parameterize(resource=('eyes_center_similarity', '01')),

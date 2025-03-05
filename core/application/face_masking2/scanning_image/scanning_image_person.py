@@ -100,7 +100,7 @@ class ScanningImage_Person(ScanningImage):
     def __init__(self, *args, **kwargs):
         super(ScanningImage_Person, self).__init__(*args, **kwargs)
         self.cache = self.bgr if self.bgr is None else \
-            XPortrait(self.bgr, rotations=[0, 180], detect_handle='SDK')  # 0, 90, 180, 270; InsightFace
+            XPortrait(self.bgr, rotations=[0, 180], detect_handle='InsightFace')  # 0, 90, 180, 270; InsightFace
 
     def doScanningSelf(self, identity_seq):
         assert isinstance(self.cache, XPortrait)
