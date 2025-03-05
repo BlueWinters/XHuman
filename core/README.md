@@ -41,8 +41,13 @@ for identity in list(summary_dict.keys()):
     masking_options[identity] = module.getMaskingOption('person_mosaic_polygon_small_line')
     masking_options[identity] = module.getMaskingOption('person_mosaic_polygon_big')
     masking_options[identity] = module.getMaskingOption('person_mosaic_polygon_big_line')
+    # 卡通类型贴纸
     masking_options[identity] = module.getMaskingOption('person_sticker_cartoon', sticker=sticker_cartoon_bgr, box_tuple=sticker_cartoon_box)
+    # 眼罩类型贴纸
     masking_options[identity] = module.getMaskingOption('person_sticker_align_points', sticker=sticker_base_bgr, eyes_center_similarity=sticker_base_points)
+    # 口罩类型贴纸
+    masking_options[identity] = module.getMaskingOption('person_sticker_align_points', sticker=sticker_base_bgr, mouth_corners_similarity=sticker_base_points)
+    # 自定义贴纸
     masking_options[identity] = module.getMaskingOption('person_sticker_custom', sticker=sticker_custom_bgr)
     # 车牌
     masking_options[identity] = module.getMaskingOption('plate_blur_gaussian')
