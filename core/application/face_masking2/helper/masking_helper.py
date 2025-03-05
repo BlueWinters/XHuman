@@ -5,10 +5,8 @@ import numpy as np
 import skimage
 from .cursor import AsynchronousCursor
 from .angle_helper import AngleHelper
-# from ..scanning.infoimage_plate import InfoImage_Plate
-# from ..scanning.infoimage_person import InfoImage_Person
-from ..scanning.scanning_image import InfoImage, InfoImage_Person, InfoImage_Plate
-from ..scanning.infovideo_person import InfoVideo_Person, InfoVideo_Person_Frame
+from ..scanning_image import *
+from ..scanning_video import *
 from ....base import XPortrait, XPortraitHelper
 from ....geometry import Rectangle, GeoFunction
 from .... import XManager
@@ -60,7 +58,7 @@ class MaskingHelper:
         return max_mask
 
     @staticmethod
-    def getPortraitMaskingWithInfoImagePlus(bgr, info_image: InfoImage, option_dict, with_hair=True, expand=0.8):
+    def getPortraitMaskingWithInfoImagePlus(bgr, objects_list, option_dict, with_hair=True, expand=0.8):
         h, w, c = bgr.shape
         # segmentation
         module = XManager.getModules('ultralytics')['yolo11m-seg']
@@ -70,62 +68,62 @@ class MaskingHelper:
             result_masks = np.round(result.masks.cpu().numpy().data * 255).astype(np.uint8)  # note: C,H,W and [0,1]
             masks = [cv2.resize(result_masks[n, :, :], (w, h)) for n in range(len(result_masks))]
         mask_dict = dict()
-        for n, info_object in enumerate(info_image):
+        for n, info_object in enumerate(objects_list):
+            if info_object.identity not in option_dict:
+                continue
+            if option_dict[info_object.identity].NameEN.startswith('sticker'):
+                continue
             if isinstance(info_object, InfoImage_Plate):
                 lft, top, rig, bot = info_object.box
                 mask = np.zeros(shape=(h, w), dtype=np.uint8)
                 mask[top:bot, lft:rig] = 255
                 setattr(info_object, 'mask_info', dict(mask=mask, box=(lft, top, rig, bot)))
                 continue
-            assert isinstance(info_object, InfoImage_Person), info_object
-            if info_object.identity not in option_dict:
-                continue
-            if option_dict[info_object.identity].NameEN.startswith('sticker'):
-                continue
-            lft, top, rig, bot = Rectangle(info_object.box).expand(expand, expand).clip(0, 0, w, h).asInt()
-            bgr_copy = np.copy(bgr)
-            # 1.
-            # for i in range(len(info_image)):
-            #     if i != n:
-            #         face_mask = XPortraitHelper.getFaceRegionByLandmark(h, w, info_image.info_person_list[i].landmark)
-            #         bgr_copy[face_mask > 0] = 255
-            # 2.
-            if len(result) > 0 and result.masks is not None and len(masks) > 0:
-                mask_box = np.zeros(shape=(h, w), dtype=np.uint8)
-                l, t, r, b = info_object.box
-                mask_box[t:b, l:r] = 255
-                count_nonzero = []
-                for j in range(len(masks)):
-                    mm = ((masks[j] > 0) & (mask_box > 0)).astype(np.uint8)
-                    count_nonzero.append(np.count_nonzero(mm))
-                index = int(np.argmax(np.array(count_nonzero, dtype=np.int32)))
-                mask_cur = masks[index]
-                bgr_copy[mask_cur == 0] = 255
-            # portrait parsing
-            # ajna = np.mean(info_person.landmark[17:27, :], axis=0)
-            # angle = 0 if ajna[1] < info_person.landmark[30, 1] else 180  # or info_person.angle
-            # angle = info_person.angle
-            angle = AngleHelper.getAngleRollByLandmark(info_object.landmark)
-            logging.info('identity-{}, angle-{}'.format(info_object.identity, angle))
-            part = bgr_copy[top:bot, lft:rig]
-            part_rot = GeoFunction.rotateImage(part, angle)
-            part_rot_parsing = XManager.getModules('portrait_parsing')(part_rot)
-            part_parsing = GeoFunction.rotateImage(part_rot_parsing, GeoFunction.rotateBack(angle))
-            if with_hair is False:
-                part_mask = np.where((0 < part_parsing) & (part_parsing < 15) & (part_parsing != 12) & (part_parsing != 13), 255, 0).astype(np.uint8)
-            else:
-                part_mask = np.where((0 < part_parsing) & (part_parsing < 15) & (part_parsing != 12), 255, 0).astype(np.uint8)
-            part_mask_single = MaskingHelper.getSingleConnectedRegion(part_mask) * 255
-            mask = np.zeros(shape=(h, w), dtype=np.uint8)
-            mask[top:bot, lft:rig] = part_mask_single
-            mask_dict[info_object.identity] = mask
-            setattr(info_object, 'mask_info', dict(mask=mask, box=(lft, top, rig, bot)))
-            # cv2.imwrite(R'N:\archive\2025\0215-masking\error_image\01\parsing\{}-bgr_copy.png'.format(n), bgr_copy)
-            # cv2.imwrite(R'N:\archive\2025\0215-masking\error_image\01\parsing\{}-parsing.png'.format(n), XManager.getModules('portrait_parsing').colorize(part_rot_parsing))
+            if isinstance(info_object, InfoImage_Person):
+                lft, top, rig, bot = Rectangle(info_object.box).expand(expand, expand).clip(0, 0, w, h).asInt()
+                bgr_copy = np.copy(bgr)
+                # 1.
+                # for i in range(len(info_image)):
+                #     if i != n:
+                #         face_mask = XPortraitHelper.getFaceRegionByLandmark(h, w, info_image.info_person_list[i].landmark)
+                #         bgr_copy[face_mask > 0] = 255
+                # 2.
+                if len(result) > 0 and result.masks is not None and len(masks) > 0:
+                    mask_box = np.zeros(shape=(h, w), dtype=np.uint8)
+                    l, t, r, b = info_object.box
+                    mask_box[t:b, l:r] = 255
+                    count_nonzero = []
+                    for j in range(len(masks)):
+                        mm = ((masks[j] > 0) & (mask_box > 0)).astype(np.uint8)
+                        count_nonzero.append(np.count_nonzero(mm))
+                    index = int(np.argmax(np.array(count_nonzero, dtype=np.int32)))
+                    mask_cur = masks[index]
+                    bgr_copy[mask_cur == 0] = 255
+                # portrait parsing
+                # ajna = np.mean(info_person.landmark[17:27, :], axis=0)
+                # angle = 0 if ajna[1] < info_person.landmark[30, 1] else 180  # or info_person.angle
+                # angle = info_person.angle
+                angle = AngleHelper.getAngleRollByLandmark(info_object.landmark)
+                logging.info('identity-{}, angle-{}'.format(info_object.identity, angle))
+                part = bgr_copy[top:bot, lft:rig]
+                part_rot = GeoFunction.rotateImage(part, angle)
+                part_rot_parsing = XManager.getModules('portrait_parsing')(part_rot)
+                part_parsing = GeoFunction.rotateImage(part_rot_parsing, GeoFunction.rotateBack(angle))
+                if with_hair is False:
+                    part_mask = np.where((0 < part_parsing) & (part_parsing < 15) & (part_parsing != 12) & (part_parsing != 13), 255, 0).astype(np.uint8)
+                else:
+                    part_mask = np.where((0 < part_parsing) & (part_parsing < 15) & (part_parsing != 12), 255, 0).astype(np.uint8)
+                part_mask_single = MaskingHelper.getSingleConnectedRegion(part_mask) * 255
+                mask = np.zeros(shape=(h, w), dtype=np.uint8)
+                mask[top:bot, lft:rig] = part_mask_single
+                mask_dict[info_object.identity] = mask
+                setattr(info_object, 'mask_info', dict(mask=mask, box=(lft, top, rig, bot)))
+                # cv2.imwrite(R'N:\archive\2025\0215-masking\error_image\01\parsing\{}-bgr_copy.png'.format(n), bgr_copy)
+                # cv2.imwrite(R'N:\archive\2025\0215-masking\error_image\01\parsing\{}-parsing.png'.format(n), XManager.getModules('portrait_parsing').colorize(part_rot_parsing))
         return mask_dict
 
     @staticmethod
-    def getPortraitMaskingWithInfoImage(bgr, info_image: InfoImage, option_dict, with_hair=True, expand=0.8):
+    def getPortraitMaskingWithInfoImage(bgr, info_image, option_dict, with_hair=True, expand=0.8):
         h, w, c = bgr.shape
         mask_dict = dict()
         for n, info_person in enumerate(info_image):

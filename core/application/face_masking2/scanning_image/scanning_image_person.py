@@ -4,8 +4,12 @@ import copy
 import os
 import cv2
 import numpy as np
-from ..helper.angle_helper import AngleHelper
+import json
+from .scanning_image import ScanningImage
+from ..helper import AngleHelper
+from ..visor import Visor
 from ....geometry import Rectangle, GeoFunction
+from ....base import XPortrait
 
 
 class InfoImage_Person:
@@ -65,16 +69,44 @@ class InfoImage_Person:
         resized = cv2.resize(crop_rot, (size, size))
         return resized if is_bgr is True else cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
 
-    def summaryAsDict(self, bgr, size=256, is_bgr=True, ext=0.2, auto_rot=False):
+    def summaryObjectAsDict(self, bgr, size=256, is_bgr=True, ext=0.2, auto_rot=False):
         bgr_c, box_c = self.autoRotateForCartoon(bgr, self.box, self.angle)
         summary = dict(
             # interface
             category=self.CategoryName,
-            image=bgr_c,
-            box=box_c.tolist(),
             preview=self.cropPreviewFace(bgr, size, is_bgr, ext, auto_rot),
-            # for debug
+            # for cartoon
             angle=self.angle,
-            cartoon_image=bgr_c,
+            cartoon_bgr=bgr_c,
             cartoon_box=box_c.tolist())
         return summary
+
+    """
+    visual
+    """
+    def visual(self, canvas):
+        return Visor.visualSinglePerson(canvas, self.identity, self.box, key_points=self.landmark)
+
+
+class ScanningImage_Person(ScanningImage):
+    """
+    """
+    @classmethod
+    def getObjectClass(cls):
+        return InfoImage_Person
+
+    """
+    """
+    def __init__(self, *args, **kwargs):
+        super(ScanningImage_Person, self).__init__(*args, **kwargs)
+        self.cache = self.bgr if self.bgr is None else \
+            XPortrait(self.bgr, rotations=[0, 180], detect_handle='SDK')  # 0, 90, 180, 270; InsightFace
+
+    def doScanningSelf(self, identity_seq):
+        assert isinstance(self.cache, XPortrait)
+        for n in range(self.cache.number):
+            info_person = InfoImage_Person(
+                identity_seq + n + 1, self.cache.box[n, :], self.cache.points[n, :, :],
+                self.cache.landmark[n, :, :], self.cache.angles[n])
+            self.info_object_list.append(info_person)
+        return self.cache.number

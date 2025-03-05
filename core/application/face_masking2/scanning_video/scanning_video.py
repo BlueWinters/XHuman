@@ -80,23 +80,9 @@ class ScanningVideo:
         self.updateObjectList([])
 
     """
-    preview interface
+    preview
     """
-    # def getInfoJson(self, *args, **kwargs) -> str:
-    #     return self.formatAsJson(True)
-
-    # def saveAsJson(self, path_out_json, schedule_call, with_frame_info=True):
-    #     if isinstance(path_out_json, str) and path_out_json.endswith('.json'):
-    #         schedule_call('扫描视频-保存结果', None)
-    #         with open(path_out_json, 'w') as file:
-    #             format_list = [person.formatAsDict(with_frame_info) for person in self.getSortedHistory()]
-    #             json.dump(format_list, file, indent=4)
-
-    # def formatAsJson(self, with_frame_info=False) -> str:
-    #     sorted_history = self.getSortedHistory()
-    #     return json.dumps([person.formatAsDict(with_frame_info) for person in sorted_history], indent=4)
-
-    def formatObjectsAsDict(self, with_frame_info=False) -> list:
+    def formatVideoObjectsAsDict(self, with_frame_info=False) -> list:
         sorted_history = self.getSortedHistory()
         return [info_object.formatAsDict(with_frame_info) for info_object in sorted_history]
 
@@ -118,8 +104,6 @@ class ScanningVideo:
                 cursor = info_object.getFrameInfoCursor(beg, end)
                 if cursor.valid() is True:
                     cursor_list.append((info_object, cursor))
-                else:
-                    logging.warning('ignore: {}'.format(str(info_object)))
             cursor_list_all.append(dict(beg=beg, end=end, cursor_list=cursor_list))
         return cursor_list_all
 
@@ -135,7 +119,10 @@ class ScanningVideo:
         raise NotImplementedError
 
     """
-    visual tracking
+    visual
     """
+    def visualVideoScanning(self, *args, **kwargs):
+        raise NotImplementedError
+
     def saveVisualScanning(self, path_in_video, path_out_video, schedule_call, **kwargs):
         raise NotImplementedError

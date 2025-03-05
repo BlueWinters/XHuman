@@ -1,17 +1,12 @@
 
 import logging
-import copy
-import os
 import cv2
 import numpy as np
 import json
 import dataclasses
-import typing
-from ..helper.cursor import AsynchronousCursor
-from ..helper.boundingbox import BoundingBox
-from ..helper.align_helper import AlignHelper
-from ....base import XPortrait
-from .... import XManager
+from .scanning_video import ScanningVideo
+from ..helper import AsynchronousCursor
+from ....utils import XVideoReader, XVideoWriter
 
 
 @dataclasses.dataclass(frozen=False)
@@ -85,6 +80,7 @@ class InfoVideo_Plate_Preview:
         #     summary['preview'] = self.transformImage(self.face_align_cache.bgr, size, is_bgr)
         if as_text is True:
             # TODO: recognize plate to text
+            summary['text'] = '苏B-12345'
             lft, top, rig, bot = self.box_track.tolist()
             summary['preview'] = np.copy(self.frame_bgr[top:bot, lft:rig, :])
         return summary
@@ -171,3 +167,113 @@ class InfoVideo_Plate:
             return AsynchronousCursor(self.frame_info_list, beg_pre_idx, end_aft_idx)
         else:
             return AsynchronousCursor(self.frame_info_list, 0, 0)
+
+
+class ScanningVideo_Plate(ScanningVideo):
+    """
+    """
+    IOU_Threshold = 0.3
+
+    @staticmethod
+    def createVideoScanning(**kwargs):
+        if 'path_in_json' in kwargs and isinstance(kwargs['path_in_json'], str):
+            info_video = ScanningVideo_Plate()
+            info_video.object_identity_history = [InfoVideo_Plate.createFromDict(info) for info in json.load(open(kwargs['path_in_json'], 'r'))]
+            return info_video
+        if 'info_string' in kwargs and isinstance(kwargs['info_string'], str):
+            info_video = ScanningVideo_Plate()
+            info_video.object_identity_history = [InfoVideo_Plate.createFromDict(info) for info in json.loads(kwargs['info_string'])]
+            return info_video
+        if 'objects_list' in kwargs and isinstance(kwargs['objects_list'], list):
+            info_video = ScanningVideo_Plate()
+            info_video.object_identity_history = [InfoVideo_Plate.createFromDict(info) for info in kwargs['objects_list']]
+            return info_video
+        raise NotImplementedError('"objects_list", "path_in_json", "info_string" not in kwargs')
+
+    def __init__(self, **kwargs):
+        super(ScanningVideo_Plate, self).__init__(**kwargs)
+        # tracking config
+        self.tracking_model = 'yolo8s-plate.pt'
+        self.tracking_config = dict(
+            persist=True, conf=0.3, iou=0.5, tracker='bytetrack.yaml', verbose=False)
+
+    """
+    tracking pipeline
+    """
+    def updateWithYOLO(self, frame_index, frame_bgr, result):
+        person_list_new = []
+        number = len(result)
+        if number > 0 and result.boxes.id is not None:
+            # classify = np.reshape(np.round(result.boxes.cls.cpu().numpy()).astype(np.int32), (-1,))
+            scores = np.reshape(result.boxes.conf.cpu().numpy().astype(np.float32), (-1,))
+            identity = np.reshape(result.boxes.id.cpu().numpy().astype(np.int32), (-1,))
+            boxes = np.reshape(np.round(result.boxes.xyxy.cpu().numpy()).astype(np.int32), (-1, 4,))
+            # update common(tracking without lose)
+            index_list = np.argsort(scores)[::-1].tolist()
+            for i, n in enumerate(index_list):
+                cur_one_box_tracker = boxes[n, :]  # 4: lft,top,rig,bot
+                index3 = self.matchPreviousByIdentity(self.object_list_current, int(identity[n]))
+                if index3 != -1:
+                    object_cur = self.object_list_current.pop(index3)
+                    assert isinstance(object_cur, InfoVideo_Plate)
+                    object_cur.appendInfo(frame_index, frame_bgr, cur_one_box_tracker)
+                    person_list_new.append(object_cur)
+                    continue
+                index4 = self.matchPreviousByIdentity(self.object_identity_history, int(identity[n]))
+                if index4 != -1:
+                    object_cur = self.object_identity_history.pop(index4)
+                    assert isinstance(object_cur, InfoVideo_Plate)
+                    object_cur.appendInfo(frame_index, frame_bgr, cur_one_box_tracker)
+                    person_list_new.append(object_cur)
+                    continue
+                # create new person
+                if np.sum(cur_one_box_tracker) > 0:
+                    # create a new person
+                    person_new = self.createNewObject(
+                        frame_index, frame_bgr, int(identity[n]), cur_one_box_tracker)
+                    if person_new is not None:
+                        person_list_new.append(person_new)
+                else:
+                    # skip the unreliable box
+                    pass
+        # update current person list
+        self.updateObjectList(person_list_new)
+
+    @staticmethod
+    def matchPreviousByIdentity(person_list, identity):
+        for n, info_object in enumerate(person_list):
+            assert isinstance(info_object, InfoVideo_Plate)
+            if info_object.yolo_identity == identity:
+                return n
+        return -1
+
+    def createNewObject(self, frame_index, frame_bgr, track_identity, box_track):
+        self.object_identity_seq += 1
+        info_object = InfoVideo_Plate(self.object_identity_seq, track_identity)
+        info_object.appendInfo(frame_index, frame_bgr, box_track)
+        info_object.setIdentityPreview(frame_index, frame_bgr, box_track)
+        return info_object
+
+    """
+    summary
+    """
+    def getPreviewSummaryAsDict(self, *args, **kwargs):
+        as_text = kwargs.pop('as_text', True)
+        preview_dict = {}
+        for info_object in self.getSortedHistory():
+            assert isinstance(info_object, InfoVideo_Plate), info_object
+            logging.info(str(info_object))
+            preview_dict[info_object.identity] = info_object.getPreviewSummary(as_text)
+        return preview_dict
+
+    """
+    visual
+    """
+    def visualVideoScanning(self, frame_index, frame_canvas, cursor_list, **kwargs):
+        from ..scanning.scanning_visor import ScanningVisor
+        for n, (info_object, cursor) in enumerate(cursor_list):
+            info: InfoVideo_Plate_Frame = cursor.current()
+            if info.frame_index == frame_index:
+                ScanningVisor.visualSinglePlate(frame_canvas, info_object.identity, '', box=info.box_track)
+                cursor.next()
+        return frame_canvas

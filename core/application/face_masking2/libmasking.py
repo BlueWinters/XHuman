@@ -20,8 +20,10 @@ class LibMasking:
     just interface for api
     """
     @staticmethod
-    def scanningImage(*args, **kwargs):
-        return LibMaskingImage.scanningImage(*args, **kwargs)
+    def scanningImage(*args, **kwargs) -> LibMaskingImage:
+        masking_image = LibMaskingImage()
+        masking_image.scanningImage(*args, **kwargs)
+        return masking_image
 
     @staticmethod
     def maskingImage(*args, **kwargs):
@@ -30,15 +32,14 @@ class LibMasking:
     """
     """
     @staticmethod
-    def scanningVideo(*args, **kwargs):
+    def scanningVideo(*args, **kwargs) -> LibMaskingVideo:
         masking_video = LibMaskingVideo()
         masking_video.scanningVideo(*args, **kwargs)
         return masking_video
 
     @staticmethod
     def maskingVideo(*args, **kwargs):
-        masking_video = LibMaskingVideo.createFromScanningDict(**kwargs)
-        return masking_video.maskingVideo(*args, **kwargs)
+        return LibMaskingVideo.maskingVideo(*args, **kwargs)
 
     """
     """

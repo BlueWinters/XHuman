@@ -125,10 +125,10 @@ class MaskingStickerAlignPoints(MaskingSticker):
             # note: detect no faces
             return canvas_bgr
 
-    def inferenceOnMaskingVideo(self, source_bgr, canvas_bgr, face_box, face_points_xy, face_points_score, **kwargs):
+    def inferenceOnMaskingVideo(self, source_bgr, canvas_bgr, face_box, key_points_xy, key_points_score, **kwargs):
         try:
-            if face_points_score[2] > 0.5 and face_points_score[1] > 0.5:
-                landmark = np.stack([face_points_xy[2, :], face_points_xy[1, :]], axis=0)  # 2,2
+            if key_points_score[2] > 0.5 and key_points_score[1] > 0.5:
+                landmark = np.stack([key_points_xy[2, :], key_points_xy[1, :]], axis=0)  # 2,2
                 sticker_warped_bgr, sticker_warped_alpha = self.warpSticker(source_bgr, face_box, landmark)
                 fusion_bgr = MaskingHelper.workOnSelectedMask(
                     canvas_bgr, sticker_warped_bgr, sticker_warped_alpha, mask_blur_k=None)

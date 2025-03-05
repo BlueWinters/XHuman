@@ -4,10 +4,10 @@ import numpy as np
 from .masking_blur import *
 from .masking_mosaic import *
 from .masking_sticker import *
-from .scanning.infoimage_person import InfoImage_Person
-from .scanning.infoimage_plate import InfoImage_Plate
-from .scanning.infovideo_person import InfoVideo_Person_Frame, InfoVideo_Person
-from .scanning.infovideo_plate import InfoVideo_Plate_Frame, InfoVideo_Plate
+from .scanning_image import InfoImage_Person
+from .scanning_image import InfoImage_Plate
+from .scanning_video import InfoVideo_Person_Frame, InfoVideo_Person
+from .scanning_video import InfoVideo_Plate_Frame, InfoVideo_Plate
 
 
 class MaskingFunction:
