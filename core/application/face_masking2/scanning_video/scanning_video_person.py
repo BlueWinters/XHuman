@@ -7,6 +7,7 @@ import dataclasses
 import typing
 from .scanning_video import ScanningVideo
 from ..helper import AsynchronousCursor, BoundingBox, AlignHelper
+from ..visor import Visor
 from ....base import XPortrait
 from .... import XManager
 
@@ -19,7 +20,7 @@ class InfoVideo_Person_Frame:
     box_track: np.ndarray  # 4,
     key_points_xy: np.ndarray  # 5,2
     key_points_score: np.ndarray  # 5,
-    box_copy: bool
+    box_flag: str
 
     @property
     def key_points(self) -> np.ndarray:
@@ -34,7 +35,7 @@ class InfoVideo_Person_Frame:
             key_points_xy=InfoVideo_Person_Frame.formatSeqToInt(string_split[2], np.int32).reshape(-1, 2),
             key_points_score=InfoVideo_Person_Frame.formatSeqToInt(string_split[3], np.float32).reshape(-1) / 100.,
             box_track=np.zeros(shape=(4,), dtype=np.int32),
-            box_copy=False)
+            box_flag='None')
 
     @staticmethod
     def formatSeqToInt(string_seq, dtype=None) -> np.ndarray:
@@ -197,33 +198,6 @@ class InfoVideo_Person:
     def setActivate(self, activate):
         self.activate = bool(activate)
 
-    def smoothing(self):
-        length = len(self.frame_info_list)
-        if length >= 2:
-            info1 = self.frame_info_list[length - 1]
-            info2 = self.frame_info_list[length - 2]
-            if info1.box_copy is False and info2.box_copy is True:
-                # search
-                index = 0
-                for n in range(length - 2, -1, -1):
-                    info_cur = self.frame_info_list[n]  # -2-(len-2) ==> -len ==> the last
-                    if info_cur.box_copy is False:
-                        index = n
-                        break
-                # refine
-                info_head = self.frame_info_list[index]
-                info_tail = self.frame_info_list[length - 1]
-                copy_length = length - 1 - index - 1
-                for n in range(1, copy_length + 1):
-                    info_cur = self.frame_info_list[index + n]
-                    assert info_cur.box_copy is True, (index, n, length)
-                    r = 1. - float(n / (copy_length + 1))
-                    info_cur.box_face = (r * info_head.box_face + (1 - r) * info_tail.box_face).astype(np.int32)
-                    info_cur.box_copy = False
-            if info1.box_copy is True and info2.box_copy is True:
-                r = 0.5
-                info1.box_face = (r * info2.box_face + (1 - r) * info1.box_face).astype(np.int32)
-
     def appendInfo(self, frame_index, frame_bgr, key_points, box_track, box_face, box_face_rot):
         lft, top, rig, bot = box_face
         key_points_xy = key_points[:5, :2]  # 5,2
@@ -231,7 +205,7 @@ class InfoVideo_Person:
         if np.sum(box_face.astype(np.int32)) != 0 and lft < rig and top < bot:
             self.frame_info_list.append(InfoVideo_Person_Frame(
                 frame_index=frame_index, box_track=box_track, box_face=box_face,
-                key_points_xy=key_points_xy, key_points_score=key_points_score, box_copy=False))
+                key_points_xy=key_points_xy, key_points_score=key_points_score, box_flag='normal'))
             bbox = BoundingBox(box_face)
             face_size = min(bbox.width, bbox.height)
             self.face_size_max = int(max(face_size, self.face_size_max))
@@ -243,9 +217,8 @@ class InfoVideo_Person:
                 box_face = np.copy(info_last.box_face)
                 self.frame_info_list.append(InfoVideo_Person_Frame(
                     frame_index=frame_index, box_track=box_track, box_face=box_face,
-                    key_points_xy=key_points_xy, key_points_score=key_points_score, box_copy=True))
-        # enforce to smoothing
-        # self.smoothing()
+                    key_points_xy=key_points_xy, key_points_score=key_points_score, box_flag='copy'))
+        # update preview
         self.setIdentityPreview(frame_index, frame_bgr, key_points, box_face)
 
     def getLastInfo(self) -> InfoVideo_Person_Frame:
@@ -311,7 +284,9 @@ class InfoVideo_Person:
             return AsynchronousCursor(self.frame_info_list, 0, 0)
 
     def interpolateFramesAtGap(self, max_frame_gap):
-        assert isinstance(max_frame_gap, int) and max_frame_gap > 0, max_frame_gap
+        assert isinstance(max_frame_gap, int), max_frame_gap
+        if not (max_frame_gap > 0):
+            return None  # invalid value
         n = 0
         while n < len(self.frame_info_list)-1:
             info1 = self.frame_info_list[n]
@@ -330,7 +305,7 @@ class InfoVideo_Person:
                     key_points_score = (r * info1.key_points_score + (1 - r) * info2.key_points_score).astype(np.float32) * key_points_flag
                     self.frame_info_list.insert(n+1+i, InfoVideo_Person_Frame(
                         frame_index=frame_index, box_track=box_track, box_face=box_face,
-                        key_points_xy=key_points_xy, key_points_score=key_points_score, box_copy=True))
+                        key_points_xy=key_points_xy, key_points_score=key_points_score, box_flag='interpolate'))
                     logging.info('interpolate frames: identity-{}, insert {} into ({}, {}), ({}, {}, {})'.format(
                         self.identity, frame_index, index_beg, index_end,
                         np.round(key_points_score*100).astype(np.int32),
@@ -347,14 +322,24 @@ class InfoVideo_Person:
             if self.frame_info_list[0].frame_index > 1:
                 info_frame = copy.deepcopy(self.frame_info_list[0])
                 info_frame.frame_index -= 1
-                info_frame.box_copy = True
+                info_frame.box_flag = 'copy'
                 self.frame_info_list.insert(0, info_frame)
         for n in range(num_interp_end):
             if self.frame_info_list[-1].frame_index < num_frames:
                 info_frame = copy.deepcopy(self.frame_info_list[-1])
                 info_frame.frame_index += 1
-                info_frame.box_copy = True
+                info_frame.box_flag = 'copy'
                 self.frame_info_list.append(info_frame)
+
+    def smoothingTrackingBox(self, r=0.5):
+        for n in range(len(self)-1):
+            info1 = self.frame_info_list[n]
+            info2 = self.frame_info_list[n+1]
+            key_points_flag = (info1.key_points_score > 0.5).astype(np.int32) * (info2.key_points_score > 0.5).astype(np.int32)
+            info2.box_track = (r * info1.box_track + (1 - r) * info2.box_track).astype(np.int32)
+            info2.box_face = (r * info1.box_face + (1 - r) * info2.box_face).astype(np.int32)
+            info2.key_points_xy[key_points_flag > 0] = (r * info1.key_points_xy + (1 - r) * info2.key_points_xy).astype(
+                np.float32)[key_points_flag > 0]
 
 
 class ScanningVideo_Person(ScanningVideo):
@@ -391,6 +376,7 @@ class ScanningVideo_Person(ScanningVideo):
     def finishTracking(self):
         self.updateObjectList([])
         self.interpolateFrame()
+        self.smoothingTracking()
         self.concatenateIdentity()
 
     def updateWithYOLO(self, frame_index, frame_bgr, result):
@@ -508,6 +494,14 @@ class ScanningVideo_Person(ScanningVideo):
             person.interpolateFramesBegAndEnd(num_interp_beg, num_interp_end, len(self.reader))
 
     """
+    smoothing tracking
+    """
+    def smoothingTracking(self):
+        for n, person in enumerate(self.object_identity_history):
+            assert isinstance(person, InfoVideo_Person), person
+            person.smoothingTrackingBox()
+
+    """
     merge person by face embedding
     """
     def concatenateIdentity(self):
@@ -578,7 +572,7 @@ class ScanningVideo_Person(ScanningVideo):
                 try:
                     cosine_similarity = obj_pre_preview.identity_embedding.dot(obj_cur_preview.identity_embedding) / \
                         (np.linalg.norm(obj_pre_preview.identity_embedding) * np.linalg.norm(obj_cur_preview.identity_embedding))
-                    # print('id-{} vs id-{}: {:.2f}'.format(obj_info_pre.identity, obj_info_cur.identity, cosine_similarity))
+                    logging.info('identity-{} vs identity-{}: {:.2f}'.format(obj_info_pre.identity, obj_info_cur.identity, cosine_similarity))
                     if cosine_similarity > 0.6:
                         return True, cosine_similarity, (frame_index_cur_beg - frame_index_pre_end)
                 except IndexError or AttributeError:
@@ -612,17 +606,27 @@ class ScanningVideo_Person(ScanningVideo):
     visual
     """
     def visualVideoScanning(self, frame_index, frame_canvas, cursor_list, **kwargs):
-        from ..visor import Visor
         vis_box_rot = kwargs.pop('vis_box_rot', True)
+        vis_key_points = kwargs.pop('vis_key_points', True)
         for n, (person, cursor) in enumerate(cursor_list):
             info: InfoVideo_Person_Frame = cursor.current()
             if info.frame_index == frame_index:
-                if vis_box_rot is True:
-                    key_points = np.concatenate([info.key_points_xy, info.key_points_score[:, None]], axis=1)
-                    box_face, box_face_rot = AlignHelper.transformPoints2FaceBox(frame_canvas, key_points, None)
-                    frame_canvas = Visor.visualSinglePerson(frame_canvas, person.identity, info.box_track, box_face_rot, info.key_points)
-                else:
-                    frame_canvas = Visor.visualSinglePerson(frame_canvas, person.identity, info.box_track, info.box_face, info.key_points)
+                frame_canvas = Visor.visualSinglePersonFromInfoFrame(frame_canvas, person, info, vis_box_rot, vis_key_points)
                 cursor.next()
         return frame_canvas
 
+    def saveVisualScanning(self, path_in_video, path_out_video, **kwargs):
+        from ....utils import XVideoReader, XVideoWriter
+        if isinstance(path_out_video, str):
+            reader = XVideoReader(path_in_video)
+            writer = XVideoWriter(reader.desc(True))
+            writer.open(path_out_video)
+            writer.visual_index = True
+            vis_box_rot = kwargs.pop('vis_box_rot', True)
+            vis_key_points = kwargs.pop('vis_key_points', True)
+            cursor_list = [(person, AsynchronousCursor(person.frame_info_list)) for person in self.object_identity_history]
+            for frame_index, frame_bgr in enumerate(reader):
+                frame_canvas = frame_bgr
+                self.visualVideoScanning(frame_index, frame_canvas, cursor_list, vis_box_rot=vis_box_rot, vis_key_points=vis_key_points)
+                writer.write(frame_canvas)
+            writer.release(reformat=True)

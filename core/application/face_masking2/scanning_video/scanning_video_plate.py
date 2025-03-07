@@ -168,6 +168,28 @@ class InfoVideo_Plate:
         else:
             return AsynchronousCursor(self.frame_info_list, 0, 0)
 
+    def interpolateFramesAtGap(self, max_frame_gap):
+        assert isinstance(max_frame_gap, int) and max_frame_gap > 0, max_frame_gap
+        n = 0
+        while n < len(self.frame_info_list)-1:
+            info1 = self.frame_info_list[n]
+            info2 = self.frame_info_list[n+1]
+            if info1.frame_index+1 < info2.frame_index and info1.frame_index+max_frame_gap >= info2.frame_index:
+                index_beg = info1.frame_index + 1
+                index_end = info2.frame_index
+                array = np.linspace(0, 1, index_end - index_beg + 2, dtype=np.float32)[1:-1]
+                for i, idx in enumerate(range(index_beg, index_end)):
+                    r = float(array[i])
+                    frame_index = idx
+                    box_track = (r * info1.box_track + (1 - r) * info2.box_track).astype(np.int32)
+                    self.frame_info_list.insert(n+1+i, InfoVideo_Plate_Frame(
+                        frame_index=frame_index, box_track=box_track, box_copy=True))
+                    logging.info('interpolate frames: identity-{}, insert {} into ({}, {})'.format(
+                        self.identity, frame_index, index_beg, index_end))
+                n += index_end - index_beg
+            else:
+                n += 1
+
 
 class ScanningVideo_Plate(ScanningVideo):
     """
@@ -200,6 +222,10 @@ class ScanningVideo_Plate(ScanningVideo):
     """
     tracking pipeline
     """
+    def finishTracking(self):
+        self.updateObjectList([])
+        self.interpolateFrame()
+
     def updateWithYOLO(self, frame_index, frame_bgr, result):
         person_list_new = []
         number = len(result)
@@ -253,6 +279,15 @@ class ScanningVideo_Plate(ScanningVideo):
         info_object.appendInfo(frame_index, frame_bgr, box_track)
         info_object.setIdentityPreview(frame_index, frame_bgr, box_track)
         return info_object
+
+    """
+    interpolate frames
+    """
+    def interpolateFrame(self, max_frame_gap=16):
+        # interpolate frames into inner gap
+        for n, plate in enumerate(self.object_identity_history):
+            assert isinstance(plate, InfoVideo_Plate), plate
+            plate.interpolateFramesAtGap(max_frame_gap)
 
     """
     summary

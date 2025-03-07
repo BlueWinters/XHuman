@@ -136,7 +136,9 @@ class LibMaskingVideo:
         scanning_dict = LibMaskingVideo.loadScanningDict(**kwargs)
         objects_list = []
         for category, scanning in scanning_dict.items():
-            objects_list.extend(scanning.object_identity_history)
+            one_category_list = [info_object for info_object in
+                scanning.object_identity_history if info_object.identity in options_dict]
+            objects_list.extend(one_category_list)
         # masking video
         if num_workers == 0:
             # process with main thread
@@ -145,7 +147,7 @@ class LibMaskingVideo:
                 writer.open(path_out_video)
                 # cursor list: [AsynchronousCursor,]
                 cursor_list = ScanningVideo.getInfoCursorList(
-                    objects_list, num_frames, 1, min_frames)[0]['cursor_list']
+                    objects_list, num_frames, 1, 0)[0]['cursor_list']
                 # preview dict: {identity: preview,}
                 preview_dict = ScanningVideo.getPreviewAsDict(objects_list)
                 # masking pipeline
@@ -162,7 +164,7 @@ class LibMaskingVideo:
                 assert num_workers > 0, num_workers
                 # cursor list: [AsynchronousCursor,]
                 cursor_list = ScanningVideo.getInfoCursorList(
-                        objects_list, num_frames, num_workers, min_frames)
+                        objects_list, num_frames, num_workers, 0)
                 # preview dict: {identity: preview,}
                 preview_dict = ScanningVideo.getPreviewAsDict(objects_list)
                 # masking pipeline

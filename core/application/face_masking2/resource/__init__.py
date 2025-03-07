@@ -45,4 +45,4 @@ def getResourceStickerCustom(prefix):
     index = prefix_name_list.index(prefix)
     name = file_name_list[index]
     bgr = Resource.loadImage('{}/{}'.format(path_sticker, name))
-    return bgr
+    return {'sticker': bgr}

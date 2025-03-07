@@ -21,7 +21,7 @@ class Visor:
             cv2.line(canvas, key_points_xy[n1], key_points_xy[n2], color, 2)
 
     @staticmethod
-    def visualSinglePerson(canvas: np.ndarray, identity, box_track, box_face=None, key_points=None):
+    def visualSinglePerson(canvas: np.ndarray, identity, box_track, box_face=None, key_points=None, suffix=''):
         color = Visor.getVisColor(identity)
         rect_th = max(round(sum(canvas.shape) / 2 * 0.003), 2)
         text_th = max(rect_th - 1, 1)
@@ -54,7 +54,7 @@ class Visor:
             Visor.visualEachSkeleton(canvas, key_points_xy, key_points_score, color, 0, 2)
             Visor.visualEachSkeleton(canvas, key_points_xy, key_points_score, color, 1, 3)
             Visor.visualEachSkeleton(canvas, key_points_xy, key_points_score, color, 2, 4)
-        label = str(identity)
+        label = '{}-{}'.format(identity, suffix) if len(suffix) > 0 else str(identity)
         box_width, box_height = cv2.getTextSize(label, 0, fontScale=text_size, thickness=text_th)[0]
         outside = point1[1] - box_height - 3 >= 0  # label fits outside box
         point2 = point1[0] + box_width, point1[1] - box_height - 3 if outside else point1[1] + box_height + 3
@@ -65,16 +65,16 @@ class Visor:
         return canvas
 
     @staticmethod
-    def visualSinglePersonFromInfoFrame(frame_canvas: np.ndarray, person, info_frame, vis_box_rotations, vis_key_points):
+    def visualSinglePersonFromInfoFrame(frame_canvas: np.ndarray, person, info_frame, vis_box_rot, vis_key_points):
         visual_function = functools.partial(
-            Visor.visualSinglePerson, frame_canvas, person.identity, info_frame.box_track,
-            key_points=info_frame.key_points if vis_key_points is True else None)
-        if vis_box_rotations is True:
+            Visor.visualSinglePerson, canvas=frame_canvas, identity=person.identity, box_track=info_frame.box_track,
+            key_points=info_frame.key_points if vis_key_points is True else None, suffix='yid_{}'.format(person.yolo_identity))
+        if vis_box_rot is True:
             key_points = np.concatenate([info_frame.key_points_xy, info_frame.key_points_score[:, None]], axis=1)
             box_face, box_face_rot = AlignHelper.transformPoints2FaceBox(frame_canvas, key_points, None)
-            frame_canvas = visual_function(box_face_rot)
+            frame_canvas = visual_function(box_face=box_face_rot)
         else:
-            frame_canvas = visual_function(info_frame.box_face)
+            frame_canvas = visual_function(box_face=info_frame.box_face)
         return frame_canvas
 
     """

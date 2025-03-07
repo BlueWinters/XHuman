@@ -48,7 +48,7 @@ class MaskingStickerCustom(MaskingSticker):
         raise NotImplementedError
 
     def inferenceOnMaskingImage(self, source_bgr, canvas_bgr, *args, **kwargs):
-        return self.inference(source_bgr, canvas_bgr, kwargs.pop('box'))
+        return self.inference(source_bgr, canvas_bgr, kwargs.pop('face_box'))
 
     def inferenceOnMaskingVideo(self, source_bgr, canvas_bgr, *args, **kwargs):
-        return self.inference(source_bgr, canvas_bgr, kwargs.pop('box'))
+        return self.inference(source_bgr, canvas_bgr, kwargs.pop('face_box'))
