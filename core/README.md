@@ -8,7 +8,7 @@
 import numpy as np
 import cv2
 from core.api import getModules
-module = getModules('face_masking')
+module = getModules('object_masking')
 
 # 1.图片打码
 # 1.1.获取人脸数量和人脸的小头像

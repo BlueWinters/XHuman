@@ -74,13 +74,3 @@ def getModuleFunction(name: str, function):
         logging.warning('{} is not staticmethod'.format(handle))
     return handle
 
-
-def getResultsFromFunctions(name, function, *args, **kwargs):
-    """
-    算法调用接口
-    """
-
-    configLogging()
-    module = getModules(name)
-    return getattr(module, function)(*args, **kwargs)
-
