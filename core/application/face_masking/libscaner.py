@@ -60,6 +60,7 @@ class Person:
         self.activate = True
         self.preview = None
         self.frame_info_list = []
+        self.face_size_max = 0
         self.smooth_box_tracker = 0.8
         self.smooth_box_face = 0.8
 
@@ -97,6 +98,9 @@ class Person:
         lft, top, rig, bot = box_face
         if np.sum(box_face.astype(np.int32)) != 0 and lft < rig and top < bot:
             self.frame_info_list.append(PersonFrameInfo(index_frame=index_frame, box_tracker=box_tracker, box_face=box_face, box_copy=False))
+            bbox = BoundingBox(box_face)
+            face_size = min(bbox.width, bbox.height)
+            self.face_size_max = int(max(face_size, self.face_size_max))
         else:
             assert len(self.frame_info_list) > 0
             info_last = self.frame_info_list[-1]
@@ -122,6 +126,7 @@ class Person:
 
     def setIdentityPreview(self, index_frame, bgr, box_face, points_scores):
         h, w, c = bgr.shape
+        # area = BoundingBox(box_face).area()
         if isinstance(points_scores, np.ndarray):
             # video
             box_face_score = float(np.sum(points_scores[:5]))
@@ -309,9 +314,9 @@ class VideoInfo:
         preview_dict = {}
         for person in self.getSortedHistory():
             preview = person.preview
-            # print('id-{}, visual_points-{}, face_size-{}, n_frame-{}'.format(
+            # logging.info('id-{}, visual_points-{}, face_size-{}, n_frame-{}'.format(
             #     person.identity, preview['num_points'], min(preview['face'].shape[0:2]), len(person.frame_info_list)))
-            if preview['num_points'] >= 4 and min(preview['face'].shape[0:2]) > face_size_min and len(person.frame_info_list) > num_frame_min:
+            if preview['num_points'] >= 4 and person.face_size_max > face_size_min and len(person.frame_info_list) > num_frame_min:
                 preview_dict[person.identity] = dict(
                     box=preview['box'], image=preview['image'],
                     face=transform(preview['face']), index_frame=preview['index_frame'], box_score=preview['box_score'])
