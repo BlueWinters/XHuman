@@ -11,7 +11,6 @@ from .cache import *
 from .. import XManager
 
 
-
 class LibFunction:
     """
     """
@@ -52,7 +51,7 @@ class LibFunction:
     def formatResults(bgr, scores, boxes, points, landmarks, radians, targets):
         def _formatResult(target):
             if target == 'source':
-                return (scores, boxes, points, landmarks, radians)
+                return scores, boxes, points, landmarks, radians
             if target == 'json':
                 data = list()
                 for s, b, p, l, r in zip(scores, boxes, points, landmarks, radians):
@@ -211,9 +210,9 @@ class LibFunction:
             warped_f = skimage.transform.warp(cache_source.bgr.astype(np.float32), transform.inverse, **param)
             warped = np.round(warped_f).astype(np.uint8)
 
-            def transform_function(**kwargs):
+            def transform_function(**inner_kwargs):
                 param_copy = copy.deepcopy(param)
-                param_copy.update(kwargs)
+                param_copy.update(inner_kwargs)
                 param_copy['inverse_map'] = transform.inverse,
                 return skimage.transform.warp(**param_copy)
             # apply transform using: LibFunction.applyTransformToImages(transform_image_call, other_images_list])

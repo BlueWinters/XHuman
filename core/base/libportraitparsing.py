@@ -7,7 +7,6 @@ import torch.nn.functional as F
 from .. import XManager
 
 
-
 class LibPortraitParsing:
     @staticmethod
     def get_color_map(N=256, normalized=False):
@@ -48,7 +47,7 @@ class LibPortraitParsing:
         'body', 'left-arm', 'right-arm',
         'left-leg', 'right-leg', 'bag', 'adding',
     ]
-    ParsingIndexDict = {name:int(n) for n, name in enumerate(ParsingSeqName)}
+    ParsingIndexDict = {name: int(n) for n, name in enumerate(ParsingSeqName)}
 
     @staticmethod
     def getResources():
@@ -80,12 +79,13 @@ class LibPortraitParsing:
     """
     def inference(self, bgr):
         h, w = bgr.shape[0:2]
-        batch_bgr, h_offset, w_offset, h2, w2 = self._format(bgr, 384, 255, 255, 255)
-        parsing_soft = self._forward(batch_bgr)
-        parsing_final = self._post(parsing_soft, h2, w2, h_offset, w_offset, h, w)
+        batch_bgr, h_offset, w_offset, h2, w2 = self.format(bgr, 384, 255, 255, 255)
+        parsing_soft = self.forward(batch_bgr)
+        parsing_final = self.post(parsing_soft, h2, w2, h_offset, w_offset, h, w)
         return parsing_final
 
-    def _format(self, image, size, b, g, r):
+    @staticmethod
+    def format(image, size, b, g, r):
         height, width = np.shape(image)[0], np.shape(image)[1]
         ratio = height / width
         if height > width:
@@ -123,12 +123,12 @@ class LibPortraitParsing:
         image = image[np.newaxis, ...] / 255
         return image, h_offset, w_offset, h2, w2
 
-    def _forward(self, batch_bgr):
+    def forward(self, batch_bgr):
         batch_input = batch_bgr
         parsing_soft = self.engine.inference(batch_input, detach=False)
         return parsing_soft
 
-    def _post(self, parsing_soft_tensor, h2, w2, h_offset, w_offset, h, w):
+    def post(self, parsing_soft_tensor, h2, w2, h_offset, w_offset, h, w):
         parsing_soft_src = parsing_soft_tensor[:, :, h_offset:h2 + h_offset, w_offset:w2 + w_offset]
         parsing_soft_rsz = F.interpolate(parsing_soft_src, (h, w), mode='bilinear', align_corners=True)
         seg_pr_tensor = torch.argmax(parsing_soft_rsz, dim=1, keepdim=False)
@@ -137,17 +137,19 @@ class LibPortraitParsing:
 
     """
     """
-    def _extractArgs(self, *args, **kwargs):
+    def extractArgs(self, *args, **kwargs):
         if len(args) > 0:
             logging.warning('{} useless parameters in {}'.format(
                 len(args), self.__class__.__name__))
         targets = kwargs.pop('targets', 'source')
         return targets
 
-    def _returnResult(self, output, targets):
+    def returnResult(self, output, targets):
         def _formatResult(target):
-            if target == 'source': return output
-            if target == 'visual': return self.colorize(output)
+            if target == 'source':
+                return output
+            if target == 'visual':
+                return self.colorize(output)
             raise Exception('no such return type {}'.format(target))
 
         if isinstance(targets, str):
@@ -157,6 +159,6 @@ class LibPortraitParsing:
         raise Exception('no such return targets {}'.format(targets))
 
     def __call__(self, bgr, *args, **kwargs):
-        target = self._extractArgs(*args, **kwargs)
+        target = self.extractArgs(*args, **kwargs)
         output = self.inference(bgr)
-        return self._returnResult(output, target)
+        return self.returnResult(output, target)

@@ -1,2 +1,0 @@
-
-from .visor import Visor

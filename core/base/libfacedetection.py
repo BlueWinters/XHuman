@@ -9,7 +9,6 @@ from ..geometry import GeoFunction
 from .. import XManager
 
 
-
 class PriorBox:
     def __init__(self, img_size, min_size, steps, clip=False):
         super(PriorBox, self).__init__()
@@ -51,7 +50,8 @@ class LibFaceDetection:
             })
         return json.dumps(data, indent=4)
 
-    def unserialize_from_json(self, content:str, split=True):
+    @staticmethod
+    def unserialize_from_json(content, split=True):
         data = json.loads(content)
         object_list = list()
         for each in data:
@@ -95,7 +95,7 @@ class LibFaceDetection:
         return bgr
 
     @staticmethod
-    def visual_targets_plt( bgr, scores, boxes, points, options=(True,True)):
+    def visual_targets_plt(bgr, scores, boxes, points, options=(True,True)):
         visual_score, visual_points = options
         import matplotlib.pyplot as plt
         rgb = bgr[:, :, ::-1]
@@ -176,24 +176,26 @@ class LibFaceDetection:
 
     """
     """
-    def resize_and_padding(self, image, dH, dW):
-        sH, sW, _ = image.shape
-        src_ratio = float(sH / sW)
-        dst_ratio = float(dH / dW)
+
+    @staticmethod
+    def resize_and_padding(image, d_h, d_w):
+        s_h, s_w, _ = image.shape
+        src_ratio = float(s_h / s_w)
+        dst_ratio = float(d_h / d_w)
         if src_ratio > dst_ratio:
-            rH, rW = dH, int(round(float(sW / sH) * dH))
-            resized = cv2.resize(image, (rW, rH))
-            lpW = (dW - rW) // 2
-            rpW = dW - rW - lpW
-            resized = np.pad(resized, ((0, 0), (lpW, rpW), (0, 0)), constant_values=255, mode='constant')
-            padding = (0, 0, lpW, rpW)
+            r_h, r_w = d_h, int(round(float(s_w / s_h) * d_h))
+            resized = cv2.resize(image, (r_w, r_h))
+            lp_w = (d_w - r_w) // 2
+            rp_w = d_w - r_w - lp_w
+            resized = np.pad(resized, ((0, 0), (lp_w, rp_w), (0, 0)), constant_values=255, mode='constant')
+            padding = (0, 0, lp_w, rp_w)
         else:
-            rH, rW = int(round(float(sH / sW) * dW)), dW
-            resized = cv2.resize(image, (rW, rH))
-            tpH = (dH - rH) // 2
-            bpH = dH - rH - tpH
-            resized = np.pad(resized, ((tpH, bpH), (0, 0), (0, 0)), constant_values=255, mode='constant')
-            padding = (tpH, bpH, 0, 0)
+            r_h, r_w = int(round(float(s_h / s_w) * d_w)), d_w
+            resized = cv2.resize(image, (r_w, r_h))
+            tp_h = (d_h - r_h) // 2
+            bp_h = d_h - r_h - tp_h
+            resized = np.pad(resized, ((tp_h, bp_h), (0, 0), (0, 0)), constant_values=255, mode='constant')
+            padding = (tp_h, bp_h, 0, 0)
         return resized, padding
 
     def normalize_input(self, image):
@@ -230,7 +232,8 @@ class LibFaceDetection:
             order = order[inds + 1]
         return keep
 
-    def transform_boxes(self, src_box, r:float=0.02):
+    @staticmethod
+    def transform_boxes(src_box, r=0.02):
         cx, cy = (src_box[:, 0] + src_box[:, 2]) // 2, (src_box[:, 1] + src_box[:, 3]) // 2
         h2, w2 = np.abs(src_box[:, 1] - src_box[:, 3]), np.abs(src_box[:, 0] - src_box[:, 2])
         l = (h2 + w2) / 4.
@@ -245,7 +248,8 @@ class LibFaceDetection:
         boxes = np.stack((x_min, y_min, x_max, y_max), axis=1)
         return boxes
 
-    def decode_box(self, loc, priors, variances):
+    @staticmethod
+    def decode_box(loc, priors, variances):
         # ref to: box_utils.py:decode
         boxes = np.concatenate((
             priors[:, :2] + loc[:, :2] * variances[0] * priors[:, 2:],
@@ -254,7 +258,8 @@ class LibFaceDetection:
         boxes[:, 2:] += boxes[:, :2]
         return boxes
 
-    def decode_landmark(self, pre, priors, variances):
+    @staticmethod
+    def decode_landmark(pre, priors, variances):
         landmark = np.concatenate(
             (priors[:, :2] + pre[:, :2] * variances[0] * priors[:, 2:],
              priors[:, :2] + pre[:, 2:4] * variances[0] * priors[:, 2:],
@@ -271,10 +276,10 @@ class LibFaceDetection:
         normalized = self.normalize_input(resized.astype(np.float32))
         boxes, scores, points = self.engine.inference(normalized)  # forward pass
 
-        priorbox = PriorBox(
+        prior_box = PriorBox(
             img_size=(resize_h, resize_w), min_size=self.min_size,
             steps=self.steps, clip=self.clip)
-        priors = priorbox.forward()
+        priors = prior_box.forward()
 
         # 1.scores
         scores = np.squeeze(scores, axis=0)[:, 1]
@@ -320,7 +325,7 @@ class LibFaceDetection:
 
         boxes = np.round(boxes).astype(np.int32)
         points = np.round(points).astype(np.int32)
-        return (scores, boxes, points)
+        return scores, boxes, points
 
     def inference_multi_scale(self, bgr):
         src_h, src_w, c = bgr.shape
@@ -345,7 +350,7 @@ class LibFaceDetection:
         points = points[keep]
         return scores, boxes, points
 
-    def inference_with_rotation(self, bgr, single_scale=True, image_angle=0):
+    def inference_with_rotation(self, bgr, image_angle=0, single_scale=True):
         if image_angle == 0:
             scores, boxes, points = self.inference_single_scale(bgr, self.img_h, self.img_w)
             angles = np.zeros(shape=len(scores), dtype=np.int32)
@@ -367,16 +372,15 @@ class LibFaceDetection:
         scores_collect, boxes_collect, points_collect, angles_collect = [], [], [], []
         if isinstance(image_angles, (list, tuple)):
             for value in image_angles:
-                assert isinstance(value, (int, float)), value
-                scores, boxes, points, angles = self.inference_with_rotation(bgr, single_scale, value)
-                # print(rot, scores)
+                assert isinstance(value, int), value
+                scores, boxes, points, angles = self.inference_with_rotation(bgr, value, single_scale)
                 if len(scores) > 0:
                     scores_collect.append(scores)
                     boxes_collect.append(boxes)
                     points_collect.append(points)
                     angles_collect.append(angles)
         else:
-            scores, boxes, points, angles = self.inference_with_rotation(bgr, single_scale, 0)
+            scores, boxes, points, angles = self.inference_with_rotation(bgr, 0, single_scale)
             if len(scores) > 0:
                 scores_collect.append(scores)
                 boxes_collect.append(boxes)
@@ -398,12 +402,11 @@ class LibFaceDetection:
             boxes = np.zeros(shape=(0, 4), dtype=np.int32)
             points = np.zeros(shape=(0, 10), dtype=np.int32)
             angles = np.zeros(shape=(0,), dtype=np.int32)
-        return (scores, boxes, points) if image_angles is None \
-            else (scores, boxes, points, angles)
+        return scores, boxes, points, angles
 
     """
     """
-    def _extractArgs(self, *args, **kwargs):
+    def extractArgs(self, *args, **kwargs):
         if len(args) > 0:
             logging.warning('{} useless parameters in {}'.format(
                 len(args), self.__class__.__name__))
@@ -412,7 +415,7 @@ class LibFaceDetection:
         image_angles = kwargs.pop('image_angles', None)
         return targets, dict(single_scale=single_scale, image_angles=image_angles)
 
-    def _returnResult(self, bgr, output, targets):
+    def returnResult(self, bgr, output, targets):
         def _formatResult(target):
             if target == 'source':
                 return output
@@ -437,6 +440,6 @@ class LibFaceDetection:
         raise Exception('no such return targets {}'.format(targets))
 
     def __call__(self, bgr, *args, **kwargs):
-        targets, inference_kwargs = self._extractArgs(*args, **kwargs)
+        targets, inference_kwargs = self.extractArgs(*args, **kwargs)
         output = self.inference(bgr, **inference_kwargs)
-        return self._returnResult(bgr, output, targets)
+        return self.returnResult(bgr, output, targets)

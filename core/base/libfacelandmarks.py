@@ -70,13 +70,13 @@ class LibFaceLandmark:
     """
     """
     def formatInput(self, bgr, image_angles=None, boxes=None, points=None):
-        if boxes is not None:
+        if boxes is None:
+            module = XManager.getModules('face_detection')
+            scores, boxes, points, angles = module(bgr, image_angles=image_angles)
+            return self.clipWithBox(bgr, boxes, angles, self.fH, self.fW)
+        else:
             # include image_angles is None or not
             return self.clipWithBox(bgr, boxes, image_angles, self.fH, self.fW)
-        if boxes is None and image_angles is None:
-            module = XManager.getModules('face_detection')
-            scores, boxes, points, angles = module(bgr, rotations=[0, 90, 180, 270])
-            return self.clipWithBox(bgr, boxes, angles, self.fH, self.fW)
 
     @staticmethod
     def clipAndResizeB(bgr, pts, angle, box):
@@ -127,8 +127,8 @@ class LibFaceLandmark:
 
     def inference(self, bgr, image_angles=None, boxes=None, points=None):
         data = self.formatInput(bgr, image_angles, boxes, points)
-        landmarks = np.zeros(shape=(len(boxes), 68, 2), dtype=np.float32)
         if len(data) > 0:
+            landmarks = np.zeros(shape=(len(data), 68, 2), dtype=np.float32)
             format_bgr_list = [pair[0] for pair in data]
             batch_pts68 = self.forward(np.array(format_bgr_list, dtype=np.uint8))
             for n, pair in enumerate(data):
@@ -137,7 +137,8 @@ class LibFaceLandmark:
                 points68 = np.reshape(batch_pts68[n, :, :], (68, 2))
                 points68_format = transform_points(points68)
                 landmarks[n, :, :] = points68_format
-        return np.round(landmarks).astype(np.int32)  # N,68,2 --> N = len(landmarks)
+            return np.round(landmarks).astype(np.int32)  # N,68,2 --> N = len(landmarks)
+        return np.zeros(shape=(0, 68, 2), dtype=np.int32)
 
     """
     """

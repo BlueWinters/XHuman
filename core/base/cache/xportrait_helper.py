@@ -14,8 +14,8 @@ class XPortraitHelper:
     @staticmethod
     def getEyesLength(cache):
         assert isinstance(cache, XPortrait), type(cache)
-        lft_eye_len = [np.linalg.norm(cache.landmark[n][36, :] - cache.landmark[n][39, :]) for n in range(cache.number)]
-        rig_eye_len = [np.linalg.norm(cache.landmark[n][42, :] - cache.landmark[n][45, :]) for n in range(cache.number)]
+        lft_eye_len = [np.linalg.norm(cache.landmarks[n][36, :] - cache.landmarks[n][39, :]) for n in range(cache.number)]
+        rig_eye_len = [np.linalg.norm(cache.landmarks[n][42, :] - cache.landmarks[n][45, :]) for n in range(cache.number)]
         return lft_eye_len, rig_eye_len
 
     @staticmethod
@@ -28,7 +28,7 @@ class XPortraitHelper:
         assert isinstance(cache, XPortrait), type(cache)
         ajna_list = []
         for n in range(cache.number):
-            ajna_list.append(np.mean(cache.landmark[n][17:27, :], axis=0))
+            ajna_list.append(np.mean(cache.landmarks[n][17:27, :], axis=0))
         return np.reshape(np.array(ajna_list, dtype=np.float32), (cache.number, 2))  # N,2
 
     @staticmethod
@@ -36,7 +36,7 @@ class XPortraitHelper:
         assert isinstance(cache, XPortrait), type(cache)
         center_both_eyes_list = []
         for n in range(cache.number):
-            center_both_eyes_list.append(np.mean(cache.landmark[n][36:48, :], axis=0))
+            center_both_eyes_list.append(np.mean(cache.landmarks[n][36:48, :], axis=0))
         return np.reshape(np.array(center_both_eyes_list, dtype=np.float32), (cache.number, 2))  # N,2
 
     @staticmethod
@@ -44,7 +44,7 @@ class XPortraitHelper:
         assert isinstance(cache, XPortrait), type(cache)
         center_each_eyes_list = []
         for n in range(cache.number):
-            center_each_eyes_list.append((np.mean(cache.landmark[n, 36:40, :], axis=0), np.mean(cache.landmark[n, 42:48, :], axis=0)))
+            center_each_eyes_list.append((np.mean(cache.landmarks[n, 36:40, :], axis=0), np.mean(cache.landmarks[n, 42:48, :], axis=0)))
         return np.stack(center_each_eyes_list, axis=0)  # N,2,2
 
     @staticmethod
@@ -83,7 +83,7 @@ class XPortraitHelper:
         index_list = [index] if isinstance(index, int) else list(range(cache.number))
         h, w = cache.shape
         for n in index_list:
-            landmark = cache.landmark[n]
+            landmark = cache.landmarks[n]
             mask_list.append(XPortraitHelper.getFaceRegionByLandmark(h, w, landmark, top_line, value))
         return mask_list
 
