@@ -121,12 +121,12 @@ class LibHeadDetectionInterface:
     @staticmethod
     def doNonMaximumSuppression(scores, boxes, nms_threshold):
         # pure python NMS baseline
-        dets = np.hstack((boxes, scores[:, np.newaxis])).astype(np.float32, copy=False)
-        x1 = dets[:, 0]
-        y1 = dets[:, 1]
-        x2 = dets[:, 2]
-        y2 = dets[:, 3]
-        scores = dets[:, 4]
+        detections = np.hstack((boxes, scores[:, np.newaxis])).astype(np.float32, copy=False)
+        x1 = detections[:, 0]
+        y1 = detections[:, 1]
+        x2 = detections[:, 2]
+        y2 = detections[:, 3]
+        scores = detections[:, 4]
         areas = (x2 - x1 + 1) * (y2 - y1 + 1)
         order = scores.argsort()[::-1]
         keep = []
@@ -141,8 +141,8 @@ class LibHeadDetectionInterface:
             h = np.maximum(0.0, yy2 - yy1 + 1)
             inter = w * h
             ovr = inter / (areas[i] + areas[order[1:]] - inter)
-            inds = np.where(ovr <= nms_threshold)[0]
-            order = order[inds + 1]
+            indexes = np.where(ovr <= nms_threshold)[0]
+            order = order[indexes + 1]
         return keep
 
     def preprocess(self, image: np.ndarray, swap=(2, 0, 1)):
@@ -216,9 +216,9 @@ class LibHeadDetectionTiny(LibHeadDetectionInterface):
     """
     """
     Config = {
-            'checkpoint': 'thirdparty/yolov7_tiny_head_0.768_post_480x640.onnx',
-            'providers': ['CUDAExecutionProvider', 'CPUExecutionProvider'],
-        }
+        'checkpoint': 'thirdparty/yolov7_tiny_head_0.768_post_480x640.onnx',
+        'providers': ['CUDAExecutionProvider', 'CPUExecutionProvider'],
+    }
 
     @staticmethod
     def getResources():

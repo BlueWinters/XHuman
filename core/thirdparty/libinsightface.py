@@ -5,14 +5,12 @@ import numpy as np
 import cv2
 import json
 from .. import XManager
-
 try:
     import warnings
     warnings.simplefilter(action='ignore', category=FutureWarning)
     import insightface
     if not insightface.__version__ >= '0.7':
-        logging.error('insightface.__version__({}) '
-            'should be >= 0.7'.format(insightface.__version__))
+        logging.error('insightface.__version__({}) should be >= 0.7'.format(insightface.__version__))
 except ImportError:
     logging.error('no such module insightface, try to: pip install insightface')
 
@@ -56,6 +54,8 @@ class LibInsightFaceWrapper:
         self.config = self.EngineConfig
         self.h = 640
         self.w = 640
+        self.root = None
+        self._application = None
 
     def __del__(self):
         logging.warning('delete module {}'.format(self.__class__.__name__))
@@ -72,16 +72,13 @@ class LibInsightFaceWrapper:
         root = kwargs['root'] if 'root' in kwargs else XManager.RootParameter
         path = '{}/{}'.format(root, self.config['folder'])
         assert os.path.exists(path), path
-        if hasattr(self, 'config') and hasattr(self, '_application'):
-            if self.config['path'] == path: return
-            # remove the previous device and module
-            logging.warning('remove the previous application')
-            if hasattr(self, '_application'): setattr(self, '_application', None)
-            if hasattr(self, 'swapper'): setattr(self, 'swapper', None)
-        self.config['path'] = path
-        self._application = insightface.app.FaceAnalysis(
-            name=self.config['name'], root=self.config['path'], download=False)
-        self._application.prepare(ctx_id=self._getContext(), det_size=(self.h, self.w))
+        if self.root is None:
+            self.root = root
+        if self._application is None:
+            assert self.root is not None, self.root
+            self._application = insightface.app.FaceAnalysis(
+                name=self.config['name'], root=self.root, download=False)
+            self._application.prepare(ctx_id=self._getContext(), det_size=(self.h, self.w))
 
     """
     get module
@@ -92,8 +89,8 @@ class LibInsightFaceWrapper:
             self.initialize()
         return self._application
 
-    def _getExtendModule(self, name:str):
-        if hasattr(self, name) == False:
+    def _getExtendModule(self, name):
+        if hasattr(self, name) is False:
             assert name in self.config['extension']
             path = '{}/{}'.format(self.config['path'], self.config['extension'][name])
             module = insightface.model_zoo.get_model(
@@ -113,14 +110,13 @@ class LibInsightFaceWrapper:
     def _swapFace(self, image, source_face, target_face, super_resolution):
         swapper = self._getExtendModule('swapper')
         image = swapper.get(image, target_face, source_face, paste_back=True)
-        if super_resolution == True:
+        if super_resolution is True:
             face_restoration = XManager.getModules('face_restoration')
             lft, top, rig, bot = np.round(target_face['bbox']).astype(np.int32).tolist()
             scale_h = (bot - top) / 128.
             scale_w = (rig - lft) / 128.
             scale = float((scale_h + scale_w) / 2.)
-            image = face_restoration(bgr=image, upscale=1,
-                targets='source') if scale > 1 else image
+            image = face_restoration(bgr=image, upscale=1, targets='source') if scale > 1 else image
         return image
 
     @staticmethod
