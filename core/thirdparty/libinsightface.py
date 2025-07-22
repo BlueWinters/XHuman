@@ -5,12 +5,14 @@ import numpy as np
 import cv2
 import json
 from .. import XManager
+
 try:
     import warnings
     warnings.simplefilter(action='ignore', category=FutureWarning)
     import insightface
     if not insightface.__version__ >= '0.7':
-        logging.error('insightface.__version__({}) should be >= 0.7'.format(insightface.__version__))
+        logging.error('insightface.__version__({}) '
+            'should be >= 0.7'.format(insightface.__version__))
 except ImportError:
     logging.error('no such module insightface, try to: pip install insightface')
 
@@ -38,6 +40,8 @@ class LibInsightFaceWrapper:
         'extension': {'swapper': 'inswapper_128.onnx'},
     }
 
+    TaskList = ['landmark_3d_68', 'landmark_2d_106', 'detection', 'genderage', 'recognition']
+
     Index_106To68 = np.array([
         1, 10, 12, 14, 16, 3, 5, 7, 0, 23, 21, 19, 32, 30, 28, 26, 17,  # 脸颊17点
         43, 48, 49, 51, 50,  # 左眉毛5点
@@ -54,8 +58,7 @@ class LibInsightFaceWrapper:
         self.config = self.EngineConfig
         self.h = 640
         self.w = 640
-        self.root = None
-        self._application = None
+        self.app = None
 
     def __del__(self):
         logging.warning('delete module {}'.format(self.__class__.__name__))
@@ -69,16 +72,14 @@ class LibInsightFaceWrapper:
         return int(content[1]) if content[0] == 'cuda' else -1
 
     def initialize(self, *args, **kwargs):
-        root = kwargs['root'] if 'root' in kwargs else XManager.RootParameter
-        path = '{}/{}'.format(root, self.config['folder'])
-        assert os.path.exists(path), path
-        if self.root is None:
-            self.root = root
-        if self._application is None:
-            assert self.root is not None, self.root
-            self._application = insightface.app.FaceAnalysis(
-                name=self.config['name'], root=self.root, download=False)
-            self._application.prepare(ctx_id=self._getContext(), det_size=(self.h, self.w))
+        if self.app is None:
+            root = kwargs['root'] if 'root' in kwargs else XManager.RootParameter
+            path = '{}/{}'.format(root, self.config['folder'])
+            assert os.path.exists(path), path
+            self.config['path'] = path
+            self.app = insightface.app.FaceAnalysis(
+                name=self.config['name'], root=self.config['path'], download=False)
+            self.app.prepare(ctx_id=self._getContext(), det_size=(self.h, self.w))
 
     """
     get module
@@ -87,9 +88,9 @@ class LibInsightFaceWrapper:
     def application(self):
         if hasattr(self, '_application') is False:
             self.initialize()
-        return self._application
+        return self.app
 
-    def _getExtendModule(self, name):
+    def _getExtendModule(self, name: str):
         if hasattr(self, name) is False:
             assert name in self.config['extension']
             path = '{}/{}'.format(self.config['path'], self.config['extension'][name])
@@ -100,7 +101,8 @@ class LibInsightFaceWrapper:
 
     """
     """
-    def _assertImage(self, image):
+    @staticmethod
+    def _assertImage(image):
         assert len(image.shape) == 3
         assert image.shape[2] == 3
 
@@ -134,14 +136,14 @@ class LibInsightFaceWrapper:
         process = kwargs.pop(
             'process', ['swap_face+sr', 'calculate_similarity'])
         process = [process] if isinstance(process, str) else process
-        for each in process: assert \
-            each == 'swap_face' or \
-            each == 'swap_face+sr' or \
-            each == 'calculate_similarity'
+        for each in process:
+            assert each == 'swap_face' or \
+                each == 'swap_face+sr' or \
+                each == 'calculate_similarity'
         targets = kwargs.pop('targets', 'source')
         return targets, process
 
-    def _inferenceWithPairInput(self, source_image:np.ndarray, target_image:np.ndarray, process:list):
+    def _inferenceWithPairInput(self, source_image: np.ndarray, target_image: np.ndarray, process: list):
         self._assertImage(source_image)
         self._assertImage(target_image)
         source_face_list = self.application.get(source_image)
@@ -168,7 +170,8 @@ class LibInsightFaceWrapper:
 
     def _returnResultFromPair(self, output, targets):
         def _formatResult(target):
-            if target == 'source': return output
+            if target == 'source':
+                return output
             if target == 'json':
                 assert 'similarity' in output
                 for one in output['similarity']:
@@ -200,17 +203,21 @@ class LibInsightFaceWrapper:
             logging.warning('{} useless parameters in {}'.format(
                 len(args), self.__class__.__name__))
         target = kwargs.pop('targets', 'source')
-        return target
+        tasks = kwargs.pop('tasks', self.TaskList)
+        inference_kwargs = dict(tasks=tasks)
+        return target, inference_kwargs
 
     @staticmethod
-    def _packageAsDict(face, array2list:bool=False):
+    def _packageAsDict(face, array2list=False):
         data = dict()
         for key, value in face.items():
             if isinstance(value, np.ndarray):
                 data[key] = value.tolist() if array2list is True else value
         data['score'] = float(face['det_score'])
-        data['sex'] = 'M' if face['gender'] == 1 else 'F'
-        data['age'] = int(face.age)
+        if 'gender' in face:
+            data['sex'] = 'M' if face['gender'] == 1 else 'F'
+        if 'age' in face:
+            data['age'] = int(face.age)
         return data
 
     def _returnResultFromSingle(self, output, targets):
@@ -230,11 +237,34 @@ class LibInsightFaceWrapper:
             return [_formatResult(target) for target in targets]
         raise Exception('no such return targets {}'.format(targets))
 
-    def callWithSingleInput(self, bgr:np.ndarray, *args, **kwargs):
+    def callWithSingleInput(self, bgr: np.ndarray, *args, **kwargs):
         self._assertImage(bgr)
-        target = self._extractArgsSingle(*args, **kwargs)
-        source_face_list = self.application.get(bgr)
+        target, inference_kwargs = self._extractArgsSingle(*args, **kwargs)
+        source_face_list = self.inferenceWithSingleInput(bgr, inference_kwargs.pop('tasks', self.TaskList))
         return self._returnResultFromSingle(source_face_list, target)
+
+    def inferenceWithSingleInput(self, bgr, tasks):
+        # reference: ~/insightface/app/face_analysis.py
+        from insightface.app.common import Face
+        bboxes, kpss = self.application.det_model.detect(bgr, max_num=0, metric='default')
+        if bboxes.shape[0] == 0:
+            return []
+        ret = []
+        for i in range(bboxes.shape[0]):
+            bbox = bboxes[i, 0:4]
+            det_score = bboxes[i, 4]
+            kps = None
+            if kpss is not None:
+                kps = kpss[i]
+            face = Face(bbox=bbox, kps=kps, det_score=det_score)
+            for taskname, model in self.application.models.items():
+                if taskname == 'detection':
+                    continue
+                if taskname not in tasks:
+                    continue
+                model.get(bgr, face)
+            ret.append(face)
+        return ret
 
     """
     """

@@ -1,8 +1,11 @@
 
 import logging
 import cv2
+import os
 import numpy as np
 import ultralytics
+import threading
+from ..utils import XVideoReader, FFMPEGHelper
 from ..geometry import GeoFunction
 from .. import XManager
 
@@ -11,13 +14,166 @@ class LibUltralyticsWrapper:
     """
     """
     @staticmethod
-    def benchmark():
-        pass
+    def constructUITab():
+        import gradio
+        with gradio.Tab('Ultralytics'):
+            with gradio.Row():
+                model_list = LibUltralyticsWrapper.ModelList
+                dropdown_models = gradio.Dropdown(model_list, label='model')
+                annotated_types = ['box', 'box_corner']
+                dropdown_annotator = gradio.Dropdown(annotated_types, annotated_types[0], label='annotator')
+            with gradio.Tab('image'):
+                with gradio.Row():
+                    with gradio.Column():
+                        input_image = gradio.Image(label='input image', height=512)
+                        with gradio.Row():
+                            input_score_threshold = gradio.Number(0.5, interactive=True, label='score-threshold', minimum=0)
+                            input_number_index = gradio.Number(0, interactive=True, label='frame-index', minimum=0)
+                        with gradio.Group():
+                            with gradio.Row():
+                                input_image_path1 = gradio.Textbox('', interactive=False, show_label=False, scale=3)
+                                action_run_image_from_upload = gradio.Button('run (from image)', scale=1)
+                        with gradio.Group():
+                            with gradio.Row():
+                                input_image_path2 = gradio.Textbox('', interactive=True, show_label=False, scale=3)
+                                action_run_image_from_video = gradio.Button('run (from video)', scale=1)
+                    output_image = gradio.Image(label='output image', height=512, interactive=False)
+            with gradio.Tab('video'):
+                with gradio.Row():
+                    with gradio.Column():
+                        input_video = gradio.Video(label='input video', height=512)
+                        with gradio.Group():
+                            with gradio.Row():
+                                input_video_path1 = gradio.Textbox('', interactive=False, show_label=False, scale=3)
+                                action_run_video1 = gradio.Button('run (from upload)', scale=1)
+                        with gradio.Group():
+                            with gradio.Row():
+                                input_video_path2 = gradio.Textbox('', interactive=True, show_label=False, scale=3)
+                                action_run_video2 = gradio.Button('run (from local)', scale=1)
+                    output_video = gradio.Image(label='output video', height=512, interactive=False)
+
+        # action
+        action_run_image_from_upload.click(
+            fn=LibUltralyticsWrapper.actionDetectImage,
+            inputs=[input_image, dropdown_models],
+            outputs=output_image)
+        action_run_image_from_video.click(
+            fn=LibUltralyticsWrapper.actionDetectImageFromVideo,
+            inputs=[input_image_path2, dropdown_models, input_number_index, input_score_threshold],
+            outputs=output_image)
+        input_number_index.change(
+            fn=LibUltralyticsWrapper.actionDetectImageFromVideo,
+            inputs=[input_image_path2, dropdown_models, input_number_index, input_score_threshold],
+            outputs=output_image)
+        action_run_video1.click(
+            fn=LibUltralyticsWrapper.actionDetectVideo,
+            inputs=[input_video, dropdown_models],
+            outputs=output_video)
+        action_run_video2.click(
+            fn=LibUltralyticsWrapper.actionDetectVideo,
+            inputs=[input_video_path2, dropdown_models],
+            outputs=output_video)
+
+    @staticmethod
+    def actionDetectImage(rgb, model, score_threshold=0.5):
+        import supervision
+        bgr = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
+        canvas_bgr = bgr.copy()
+        results = XManager.getModules('ultralytics')[model](bgr, conf=score_threshold)[0]
+        detections = supervision.Detections.from_ultralytics(results)
+        box_annotator = supervision.BoxAnnotator()
+        canvas_bgr = box_annotator.annotate(canvas_bgr, detections)
+        if 'pose' in model:
+            key_points = supervision.KeyPoints.from_ultralytics(results)
+            canvas_bgr = supervision.VertexAnnotator(supervision.Color.GREEN, 10).annotate(canvas_bgr, key_points)
+            canvas_bgr = supervision.EdgeAnnotator(supervision.Color.GREEN, 5).annotate(canvas_bgr, key_points)
+        if 'seg' in model:
+            pass
+        return np.copy(canvas_bgr[:, :, ::-1])
+
+    @staticmethod
+    def actionDetectVideo(path_video, model):
+        import shutil
+        from core.utils import Resource
+        module = XManager.getModules('ultralytics')[model]
+        uuid_name, (path_in_video, path_out_video) = Resource.createRandomCacheFileName(['-in.mp4', '-out.mp4'])
+        shutil.copyfile(path_video, path_in_video)
+        return None
+    
+    @staticmethod
+    def actionDetectImageFromVideo(path_video, model, n_index, score_threshold):
+        assert os.path.exists(path_video), path_video
+        reader = XVideoReader(path_video)
+        flag = False
+        bgr = None
+        if FFMPEGHelper.checkVideoFPS(path_video, 0) is True:
+            reader.resetPositionByIndex(n_index)
+            flag, bgr = reader.read()
+        else:
+            for _ in range(n_index):
+                if reader.read()[0] is False:
+                    flag = False
+                    bgr = np.zeros(shape=(512, 512, 3), dtype=np.uint8)
+            flag, bgr = reader.read()
+        if flag is True:
+            return LibUltralyticsWrapper.actionDetectImage(bgr[:, :, ::-1], model, score_threshold)
+        else:
+            return np.zeros(shape=(512, 512, 3), dtype=np.uint8)
 
     @staticmethod
     def getResources():
         return ['{}/{}.pt'.format(LibUltralyticsWrapper.CheckpointBase, name)
                 for name in LibUltralyticsWrapper.ModelList]
+
+    @staticmethod
+    def exportAsTensorRT(root, name, mode, **kwargs):
+        # demo code for export
+        assert mode in ['fp32', 'fp16', 'int8']
+        assert name in LibUltralyticsWrapper.ModelList, name
+        path_base = '{}/{}'.format(root, LibUltralyticsWrapper.CheckpointBase)
+        yolo = ultralytics.YOLO('{}/{}'.format(path_base, name))
+        config = dict()
+        path_yaml_cache = ''
+        if mode == 'fp16':
+            config['half'] = True
+            config['nms'] = True
+        if mode == 'int8':
+            import yaml
+            config['half'] = False
+            config['int8'] = True
+            config['nms'] = True
+            # https://github.com/ultralytics/ultralytics/tree/main/ultralytics/cfg/datasets
+            path_coco = '{}/asset/ultralytics_coco8_pose.yaml'.format(os.path.dirname(__file__))
+            yaml_data = yaml.load(open(path_coco, 'r'), Loader=yaml.FullLoader)
+            yaml_data['path'] = kwargs.pop('data', yaml_data['path'])
+            path_yaml_cache = '{}/asset/ultralytics_coco8_pose_cache.yaml'.format(os.path.dirname(__file__))
+            with open(path_yaml_cache, 'w', encoding='utf-8') as file:
+                yaml.dump(data=yaml_data, stream=file, allow_unicode=True)
+            config['data'] = path_yaml_cache
+        yolo.export(format='engine', **config)
+        if name.endswith('pt'):
+            name = name.replace('.pt', '')
+        else:
+            name = name
+        # rename engine file
+        path_src = '{}/{}.engine'.format(path_base, name)
+        path_dst = '{}/{}-{}.engine'.format(path_base, name, mode)
+        os.rename(path_src, path_dst)
+        print('rename engine file: {} -> {}'.format(path_src, path_dst))
+        # rename onnx file
+        path_onnx = '{}/{}.onnx'.format(path_base, name)
+        if os.path.exists(path_onnx) is True:
+            print('auto-remove: {}'.format(path_onnx))
+            os.remove(path_onnx)
+        # remove yaml file
+        if os.path.exists(path_yaml_cache) is True:
+            print('auto-remove: {}'.format(path_yaml_cache))
+            os.remove(path_yaml_cache)
+        # remove cache files
+        path_trt_cache = '{}/{}.cache'.format(path_base, name)
+        if os.path.exists(path_trt_cache) is True:
+            print('auto-remove: {}'.format(path_trt_cache))
+            os.remove(path_trt_cache)
 
     """
     """
@@ -27,18 +183,21 @@ class LibUltralyticsWrapper:
         'yolo11n',  # 'yolo11s', 'yolo11m', 'yolo11l', 'yolo11x',
         'yolo11n-pose', 'yolo11m-pose', 'yolo11x-pose',  # 'yolo11s-pose', 'yolo11m-pose', 'yolo11l-pose',
         'yolo11n-seg', 'yolo11m-seg', 'yolo11x-seg',
+        'yolo11x-pose-fp16.engine', 'yolo11x-pose-int8.engine',
         # others
-        'yolo8s-plate.pt',
+        'yolo8s-plate.pt', 'yolo8s-plate.20250414.pt', 'yolo8s-plate.20250416.pt', 'yolo8s-plate.20250422.pt',
+        'yolo11s-plate.20250425.pt', 'yolo11s-plate.20250430.pt'
     ]
 
     def __init__(self, *args, **kwargs):
         self.model_dict = dict()
+        self.root = None
 
     def __del__(self):
         logging.warning('delete module {}'.format(self.__class__.__name__))
 
     def initialize(self, *args, **kwargs):
-        if hasattr(self, 'root') is False:
+        if self.root is None:
             root = kwargs['root'] if 'root' in kwargs else XManager.RootParameter
             self.root = '{}/{}'.format(root, self.CheckpointBase)
 
@@ -46,11 +205,19 @@ class LibUltralyticsWrapper:
         assert name in LibUltralyticsWrapper.ModelList, name
         if name not in self.model_dict:
             self.model_dict[name] = ultralytics.YOLO('{}/{}'.format(self.root, name))
-            # setattr(self, '_{}'.format(name), self.model_dict[name])
+            logging.info('load ultralytics model: {}'.format(name))
         return self.model_dict[name]
 
-    def __getitem__(self, name: str):
-        return self.getSpecific(name)
+    def __getitem__(self, name: str, with_lock=True):
+        if with_lock is True:
+            lock = threading.Lock()
+            lock.acquire()
+            try:
+                return self.getSpecific(name)
+            finally:
+                lock.release()
+        else:
+            return self.getSpecific(name)
 
     def resetTracker(self, name):
         if name in self.model_dict:
@@ -162,3 +329,13 @@ class LibUltralyticsWrapper:
             order = order[inds + 1]
         return keep
 
+
+if __name__ == '__main__':
+    import argparse
+    parser = argparse.ArgumentParser(description='build tensorrt')
+    parser.add_argument('--root', type=str, required=True)
+    parser.add_argument('--name', type=str, required=True)
+    parser.add_argument('--mode', type=str, default='int8', required=True)
+    parser.add_argument('--data', type=str, default='')
+    args = parser.parse_args()
+    LibUltralyticsWrapper.exportAsTensorRT(args.root, args.name, args.mode, data=args.data)
