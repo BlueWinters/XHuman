@@ -1,4 +1,3 @@
-
 import cv2
 import numpy as np
 import logging
@@ -57,7 +56,7 @@ class LibFaceDetection:
         for each in data:
             object_list.append({
                 'score': float(each['score']),
-                'box': np.array(each['box'], dtype=np.int32).reshape(4,),
+                'box': np.array(each['box'], dtype=np.int32).reshape(4, ),
                 'points': np.array(each['points'], dtype=np.int32).reshape(5, 2),
             })
         return object_list
@@ -68,18 +67,18 @@ class LibFaceDetection:
         for n, (s, b, p) in enumerate(zip(scores, boxes, points)):
             print('#{:3d}: score {}% box {} points{}'.format(
                 n,
-                int(round(s, 2)*100),
+                int(round(s, 2) * 100),
                 b.reshape(-1).tolist(),
                 p.reshape(-1).tolist())
             )
 
     @staticmethod
-    def visual_targets_cv2(bgr, scores, boxes, points, options=(True,True)):
+    def visual_targets_cv2(bgr, scores, boxes, points, options=(True, True)):
         visual_score, visual_points = options
         for s, b, p in zip(scores, boxes, points):
             # confidence
             if visual_score:
-                text = '{}%'.format(int(round(s, 2)*100))
+                text = '{}%'.format(int(round(s, 2) * 100))
                 cx, cy = b[0], b[1] + 12
                 cv2.putText(bgr, text, (cx, cy), cv2.FONT_HERSHEY_DUPLEX, 0.5, (255, 255, 255))
             # bounding box
@@ -95,7 +94,7 @@ class LibFaceDetection:
         return bgr
 
     @staticmethod
-    def visual_targets_plt(bgr, scores, boxes, points, options=(True,True)):
+    def visual_targets_plt(bgr, scores, boxes, points, options=(True, True)):
         visual_score, visual_points = options
         import matplotlib.pyplot as plt
         rgb = bgr[:, :, ::-1]
@@ -107,10 +106,10 @@ class LibFaceDetection:
 
         for s, b, p in zip(scores, boxes, points):
             # confidence
-            text = '{}%'.format(int(round(s, 2)*100))
+            text = '{}%'.format(int(round(s, 2) * 100))
             font_size = max(h, w) // 100.
             bbox = dict(facecolor='black', boxstyle='square', pad=0.1, alpha=0.5)
-            cx, cy = b[0]+font_size, b[1]+font_size/2.
+            cx, cy = b[0] + font_size, b[1] + font_size / 2.
             if visual_score:
                 axs.text(cx, cy, text, bbox=bbox, ha='center', va='center', fontsize=font_size, color='white')
             # bounding box
@@ -147,6 +146,7 @@ class LibFaceDetection:
 
     """
     """
+
     def __init__(self, *args, **kwargs):
         self.engine = XManager.createEngine(self.EngineConfig)
         # model config parameters
@@ -161,6 +161,10 @@ class LibFaceDetection:
         self.variance = [0.1, 0.2]
         self.steps = [8, 16, 32]
         self.clip = False
+        # prior box
+        prior_box = PriorBox((self.img_h, self.img_w), self.min_size, self.steps, self.clip).forward()
+        self.prior_box_dict = {(self.img_h, self.img_w): prior_box}
+        self.multi_dict = {(self.img_h, self.img_w): self.variance[0] * prior_box[:, 2:]}
         # for visual
         self.visual_score = False
         self.visual_points = False
@@ -171,6 +175,7 @@ class LibFaceDetection:
 
     """
     """
+
     def initialize(self, *args, **kwargs):
         self.engine.initialize(*args, **kwargs)
 
@@ -199,9 +204,8 @@ class LibFaceDetection:
         return resized, padding
 
     def normalize_input(self, image):
-        image -= self.rgb_mean
-        batch_image_np = np.expand_dims(np.transpose(image, (2, 0, 1)), axis=0)
-        return batch_image_np
+        batch_image = cv2.dnn.blobFromImage(image, scalefactor=1.0, mean=self.rgb_mean, swapRB=False)
+        return batch_image
 
     @staticmethod
     def non_maximum_suppression(scores, boxes, nms_threshold):
@@ -233,108 +237,105 @@ class LibFaceDetection:
         return keep
 
     @staticmethod
-    def transform_boxes(src_box, r=0.02):
-        cx, cy = (src_box[:, 0] + src_box[:, 2]) // 2, (src_box[:, 1] + src_box[:, 3]) // 2
+    def transform_boxes(src_box, r: float = 0.02):
+        cx, cy = (src_box[:, 0] + src_box[:, 2]) / 2., (src_box[:, 1] + src_box[:, 3]) / 2.
         h2, w2 = np.abs(src_box[:, 1] - src_box[:, 3]), np.abs(src_box[:, 0] - src_box[:, 2])
         l = (h2 + w2) / 4.
         x_min, y_min, x_max, y_max = [cx - l, cy - l, cx + l, cy + l]
         diff_h = src_box[:, 3] - y_max
-        y_min += diff_h
-        y_max += diff_h
-        x_min -= 2 * l * r
-        y_min -= 2 * l * r
-        x_max += 2 * l * r
-        y_max += 2 * l * r
+        x_min = x_min - 2 * l * r
+        y_min = y_min - 2 * l * r + diff_h
+        x_max = x_max + 2 * l * r
+        y_max = y_max + 2 * l * r + diff_h
         boxes = np.stack((x_min, y_min, x_max, y_max), axis=1)
         return boxes
 
-    @staticmethod
-    def decode_box(loc, priors, variances):
-        # ref to: box_utils.py:decode
-        boxes = np.concatenate((
-            priors[:, :2] + loc[:, :2] * variances[0] * priors[:, 2:],
-            priors[:, 2:] * np.exp(loc[:, 2:] * variances[1])), 1)
+    def decode_box(self, loc, index, resize_h, resize_w, rescale_h, rescale_w, src_h, src_w, lp, tp):
+        priors = self.get_prior_box(resize_h, resize_w)[index]
+        multi = self.get_multi(resize_h, resize_w)[index]
+        loc = loc[index]
+        boxes = np.empty_like(loc, dtype=np.float32)
+        boxes[:, :2] = priors[:, :2] + loc[:, :2] * multi
+        boxes[:, 2:] = priors[:, 2:] * np.exp(loc[:, 2:] * self.variance[1])
         boxes[:, :2] -= boxes[:, 2:] / 2
         boxes[:, 2:] += boxes[:, :2]
-        return boxes
+        boxes[:, 0::2] = np.clip((boxes[:, 0::2] * resize_w - lp) / rescale_w, 0, src_w)
+        boxes[:, 1::2] = np.clip((boxes[:, 1::2] * resize_h - tp) / rescale_h, 0, src_h)
+        # for square box
+        if self.square_box:
+            boxes = self.transform_boxes(boxes)
+        return np.round(boxes).astype(np.int32)
 
-    @staticmethod
-    def decode_landmark(pre, priors, variances):
-        landmark = np.concatenate(
-            (priors[:, :2] + pre[:, :2] * variances[0] * priors[:, 2:],
-             priors[:, :2] + pre[:, 2:4] * variances[0] * priors[:, 2:],
-             priors[:, :2] + pre[:, 4:6] * variances[0] * priors[:, 2:],
-             priors[:, :2] + pre[:, 6:8] * variances[0] * priors[:, 2:],
-             priors[:, :2] + pre[:, 8:10] * variances[0] * priors[:, 2:],
-             ), axis=1)
-        return landmark
+    def decode_landmark(self, points, index, resize_h, resize_w, rescale_h, rescale_w, src_h, src_w, lp, tp):
+        priors = self.get_prior_box(resize_h, resize_w)[index]
+        multi = self.get_multi(resize_h, resize_w)[index]
+        points = points[index]
+        N = points.shape[0]
+        pts = points.reshape(N, 5, 2)
+        landmark = priors[:, :2][:, None, :] + pts * multi[:, None, :]
+        landmark[:, :, 0] = np.clip((landmark[:, :, 0] * resize_w - lp) / rescale_w, 0, src_w)
+        landmark[:, :, 1] = np.clip((landmark[:, :, 1] * resize_h - tp) / rescale_h, 0, src_h)
+        return np.round(landmark.reshape(N, 10)).astype(np.int32)
 
-    def inference_single_scale(self, bgr, resize_h, resize_w):
+    def get_prior_box(self, resize_h, resize_w):
+        if (resize_h, resize_w) not in self.prior_box_dict:
+            priorbox = PriorBox(
+                img_size=(resize_h, resize_w), min_size=self.min_size,
+                steps=self.steps, clip=self.clip)
+            self.prior_box_dict[(resize_h, resize_w)] = priorbox.forward()
+        return self.prior_box_dict[(resize_h, resize_w)]
+
+    def get_multi(self, resize_h, resize_w):
+        if (resize_h, resize_w) not in self.multi_dict:
+            priorbox = self.get_prior_box(resize_h, resize_w)
+            self.multi_dict[(resize_h, resize_w)] = self.variance[0] * priorbox[:, 2:]
+        return self.multi_dict[(resize_h, resize_w)]
+
+    def inference_single_scale(self, bgr, resize_h, resize_w, score_threshold):
         src_h, src_w, c = bgr.shape
         resized, padding = self.resize_and_padding(bgr, resize_h, resize_w)
-
-        normalized = self.normalize_input(resized.astype(np.float32))
+        normalized = self.normalize_input(resized)
         boxes, scores, points = self.engine.inference(normalized)  # forward pass
 
-        prior_box = PriorBox(
-            img_size=(resize_h, resize_w), min_size=self.min_size,
-            steps=self.steps, clip=self.clip)
-        priors = prior_box.forward()
-
-        # 1.scores
+        # filter low scores & Top-K
         scores = np.squeeze(scores, axis=0)[:, 1]
-        # 2.boxes
-        boxes = self.decode_box(np.squeeze(boxes, axis=0), priors, self.variance)
-        boxes[:, 0::2] *= resize_w
-        boxes[:, 1::2] *= resize_h
-        # 3.points
-        points = self.decode_landmark(np.squeeze(points, axis=0), priors, self.variance)
-        points[:, 0::2] *= resize_w
-        points[:, 1::2] *= resize_h
+        boxes = np.squeeze(boxes, axis=0)
+        points = np.squeeze(points, axis=0)
+        keep = np.where(scores > score_threshold)[0]
+        if keep.size == 0:
+            return scores[:0], boxes[:0], points[:0]  # 直接返回空结果，防止后续报错
 
-        # ignore low scores
-        keep = np.where(scores > self.score_threshold)[0]
-        scores = scores[keep]
-        boxes = boxes[keep]
-        points = points[keep]
+        filtered_scores = scores[keep]
+        if filtered_scores.size > self.top_k:
+            top_k_idx = np.argpartition(-filtered_scores, self.top_k - 1)[:self.top_k]
+            sorted_idx = top_k_idx[np.argsort(-filtered_scores[top_k_idx])]
+            index = keep[sorted_idx]
+        else:
+            sorted_idx = np.argsort(-filtered_scores)
+            index = keep[sorted_idx]
+        scores = scores[index]
+        tp, bp, lp, rp = padding
+        rescale_w = (resize_w - lp - rp) / src_w
+        rescale_h = (resize_h - tp - bp) / src_h
+        boxes = self.decode_box(boxes, index, resize_h, resize_w, rescale_h, rescale_w, src_h, src_w, lp, tp)
+        points = self.decode_landmark(points, index, resize_h, resize_w, rescale_h, rescale_w, src_h, src_w, lp, tp)
 
-        # Top-K
-        top_k = scores.argsort()[::-1][:self.top_k]
-        scores = scores[top_k]
-        boxes = boxes[top_k]
-        points = points[top_k]
-
-        # NMS
+        # nms
         keep = self.non_maximum_suppression(scores, boxes, self.nms_threshold)
         scores = scores[keep]
         boxes = boxes[keep]
         points = points[keep]
-
-        # for square box
-        if self.square_box or False:
-            boxes = self.transform_boxes(boxes)
-
-        # calculate the coordinates
-        tp, bp, lp, rp = padding
-        rescale_w = (resize_w - lp - rp) / src_w
-        rescale_h = (resize_h - tp - bp) / src_h
-        boxes[:, 0::2] = np.clip((boxes[:, 0::2] - lp) / rescale_w, 0, src_w)
-        boxes[:, 1::2] = np.clip((boxes[:, 1::2] - tp) / rescale_h, 0, src_h)
-        points[:, 0::2] = np.clip((points[:, 0::2] - lp) / rescale_w, 0, src_w)
-        points[:, 1::2] = np.clip((points[:, 1::2] - tp) / rescale_h, 0, src_h)
-
-        boxes = np.round(boxes).astype(np.int32)
-        points = np.round(points).astype(np.int32)
         return scores, boxes, points
 
-    def inference_multi_scale(self, bgr):
+    def inference_multi_scale(self, bgr, score_threshold):
         src_h, src_w, c = bgr.shape
         scores_collect, boxes_collect, points_collect = [], [], []
         max_side = max(src_h, src_w)
         resize_h, resize_w = self.img_h, self.img_w
-        while resize_h/2 < max_side or resize_w/2 < max_side:
+        while resize_h / 2 < max_side or resize_w / 2 < max_side:
             # source direction
-            scores, boxes, points = self.inference_single_scale(bgr, resize_h=resize_h, resize_w=resize_w)
+            scores, boxes, points = self.inference_single_scale(
+                bgr, resize_h, resize_w, score_threshold)
             scores_collect.append(scores)
             boxes_collect.append(boxes)
             points_collect.append(points)
@@ -350,14 +351,14 @@ class LibFaceDetection:
         points = points[keep]
         return scores, boxes, points
 
-    def inference_with_rotation(self, bgr, image_angle=0, single_scale=True):
+    def inference_with_rotation(self, bgr, score_threshold, single_scale=True, image_angle=0):
         if image_angle == 0:
-            scores, boxes, points = self.inference_single_scale(bgr, self.img_h, self.img_w)
+            scores, boxes, points = self.inference_single_scale(bgr, self.img_h, self.img_w, score_threshold)
             angles = np.zeros(shape=len(scores), dtype=np.int32)
             return scores, boxes, points, angles
         if image_angle in GeoFunction.CVRotationDict:
             rot = cv2.rotate(bgr, GeoFunction.CVRotationDict[image_angle])
-            scores, boxes, points = self.inference_single_scale(rot, self.img_h, self.img_w)
+            scores, boxes, points = self.inference_single_scale(rot, self.img_h, self.img_w, score_threshold)
             h, w, c = rot.shape
             angle_back = GeoFunction.rotateBack(image_angle)
             boxes = GeoFunction.rotateBoxes(np.reshape(boxes, (-1, 4)), angle_back, h, w)
@@ -368,24 +369,22 @@ class LibFaceDetection:
             return scores, boxes, points, angles
         raise ValueError('angle {} not in [0,90,180,270]'.format(image_angle))
 
-    def inference(self, bgr, single_scale=True, image_angles=None):
+    def inference(self, bgr, score_threshold, single_scale=True, image_angles=None):
         scores_collect, boxes_collect, points_collect, angles_collect = [], [], [], []
         if isinstance(image_angles, (list, tuple)):
             for value in image_angles:
-                assert isinstance(value, int), value
-                scores, boxes, points, angles = self.inference_with_rotation(bgr, value, single_scale)
+                assert isinstance(value, (int, float)), value
+                scores, boxes, points, angles = self.inference_with_rotation(
+                    bgr, score_threshold, single_scale, value)
                 if len(scores) > 0:
                     scores_collect.append(scores)
                     boxes_collect.append(boxes)
                     points_collect.append(points)
                     angles_collect.append(angles)
         else:
-            scores, boxes, points, angles = self.inference_with_rotation(bgr, 0, single_scale)
-            if len(scores) > 0:
-                scores_collect.append(scores)
-                boxes_collect.append(boxes)
-                points_collect.append(points)
-                angles_collect.append(angles)
+            scores, boxes, points, angles = self.inference_with_rotation(
+                bgr, score_threshold, single_scale, 0)
+            return scores, boxes, points
         # NMS
         if len(scores_collect) > 0:
             scores = np.concatenate(scores_collect, axis=0)
@@ -402,18 +401,21 @@ class LibFaceDetection:
             boxes = np.zeros(shape=(0, 4), dtype=np.int32)
             points = np.zeros(shape=(0, 10), dtype=np.int32)
             angles = np.zeros(shape=(0,), dtype=np.int32)
-        return scores, boxes, points, angles
+        return (scores, boxes, points) if image_angles is None \
+            else (scores, boxes, points, angles)
 
     """
     """
+
     def extractArgs(self, *args, **kwargs):
         if len(args) > 0:
             logging.warning('{} useless parameters in {}'.format(
                 len(args), self.__class__.__name__))
         targets = kwargs.pop('targets', 'source')
+        score_threshold = float(kwargs.pop('score_threshold', self.score_threshold))
         single_scale = bool(kwargs.pop('single_scale', True))
         image_angles = kwargs.pop('image_angles', None)
-        return targets, dict(single_scale=single_scale, image_angles=image_angles)
+        return targets, dict(single_scale=single_scale, image_angles=image_angles, score_threshold=score_threshold)
 
     def returnResult(self, bgr, output, targets):
         def _formatResult(target):

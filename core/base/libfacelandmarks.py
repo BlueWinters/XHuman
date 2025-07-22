@@ -71,9 +71,14 @@ class LibFaceLandmark:
     """
     def formatInput(self, bgr, image_angles=None, boxes=None, points=None):
         if boxes is None:
-            module = XManager.getModules('face_detection')
-            scores, boxes, points, angles = module(bgr, image_angles=image_angles)
-            return self.clipWithBox(bgr, boxes, angles, self.fH, self.fW)
+            if image_angles is not None:
+                module = XManager.getModules('face_detection')
+                scores, boxes, points, angles = module(bgr, image_angles=image_angles)
+                return self.clipWithBox(bgr, boxes, angles, self.fH, self.fW)
+            else:
+                module = XManager.getModules('face_detection')
+                scores, boxes, points = module(bgr, image_angles=image_angles)
+                return self.clipWithBox(bgr, boxes, None, self.fH, self.fW)
         else:
             # include image_angles is None or not
             return self.clipWithBox(bgr, boxes, image_angles, self.fH, self.fW)
@@ -138,7 +143,7 @@ class LibFaceLandmark:
                 points68_format = transform_points(points68)
                 landmarks[n, :, :] = points68_format
             return np.round(landmarks).astype(np.int32)  # N,68,2 --> N = len(landmarks)
-        return np.zeros(shape=(0, 68, 2), dtype=np.int32)
+        return list()
 
     """
     """
