@@ -86,4 +86,43 @@ class GeoFunction:
             return boxes_copy
         raise ValueError('angle {} not in [0,90,180,270]'.format(angle))
 
+    """
+    """
+    @staticmethod
+    def isValidBox(box, as_int=True):
+        if isinstance(box, np.ndarray):
+            assert len(box.shape) == 1 and len(box) == 4, box.shape
+            lft, top, rig, bot = box.astype(np.int32).tolist() if as_int else box.tolist()
+            return bool(lft < rig) and bool(top < bot)
+        if isinstance(box, (tuple, list)):
+            assert len(box) == 4, box
+            lft, top, rig, bot = [int(v) for v in box] if as_int else box
+            return bool(lft < rig) and bool(top < bot)
+        raise NotImplementedError
 
+    """
+    """
+    @staticmethod
+    def estimateProjectionPoint(point1, point2, point_proj, r=None):
+        v = point2 - point1
+        u = point_proj - point1
+        if r is not None:
+            return point1 + v * (np.dot(u, v) / np.dot(v, v) - r)
+        return point1 + v * (np.dot(u, v) / np.dot(v, v))
+
+    @staticmethod
+    def calculateRadian(point0, point1, point2):
+        try:
+            v1 = point1 - point0
+            v2 = point2 - point0
+            d1 = float(np.linalg.norm(v1))
+            d2 = float(np.linalg.norm(v2))
+            if d1 == 0. or d2 == 0.:
+                return None
+            dot = np.dot(v1, v2) / (d1 * d2)
+            dot = np.clip(dot, -1, 1)
+            return float(np.arccos(dot))
+        except Exception as e:
+            import logging
+            logging.error('calculateRadian error: {}, {}, {}, {} --> {}'.format(v1, v2, d1, d2, dot))
+            raise e

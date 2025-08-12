@@ -2,27 +2,15 @@
 import logging
 import numpy as np
 import os
-import pycuda.driver as cuda
-import tensorrt as trt
+try:
+    import tensorrt as trt
+    from cuda import cuda, cudart
+    logging.warning('tensorrt version: {}'.format(trt.__version__))
+except ImportError as e:
+    logging.error('tensorrt or cuda-python is not installed. please install tensorrt or cuda-python to use this module.')
+    raise e
 from .xengine import XEngine
-from .xcontext import *
-
-
-
-
-
-class HostDeviceMem(object):
-    def __init__(self, host_mem, device_mem, binding):
-        self.host = host_mem
-        self.device = device_mem
-        self.binding = binding
-
-    def __str__(self):
-        return "Host:\n" + str(self.host) + "\nDevice:\n" + str(self.device)
-
-    def __repr__(self):
-        return self.__str__()
-
+from .. import XManager
 
 
 class XEngineTensorRT(XEngine):
@@ -36,246 +24,147 @@ class XEngineTensorRT(XEngine):
     def __init__(self, config:dict):
         super(XEngineTensorRT, self).__init__(config)
         self.type = 'tensorrt'
+        self.root = None
+        # Setup I/O bindings
+        self.inputs = []
+        self.outputs = []
+        self.allocations = []
 
     """
     """
     @staticmethod
     def create(*args, **kwargs):
         engine_config = kwargs['config']
-        if 'option' in engine_config and engine_config['option'] is not None:
-            if 'shape_optimize' in engine_config['option']:
-                return LibEngineTensorRT_DynamicShape(config=engine_config)
-            if 'dynamic_context' in engine_config['option']:
-                return XEngineTensorRT_DynamicContext(config=engine_config)
         return XEngineTensorRT(config=engine_config)
 
     """
     """
-    def _to_GiB(self, val):
+    @staticmethod
+    def _to_GiB(val):
         return val * 1 << 30
 
-    # This function is generalized for multiple inputs/outputs.
-    # inputs and outputs are expected to be lists of HostDeviceMem objects.
-    def _do_inference(self, context, bindings, inputs, outputs, stream, batch_size:int=1):
-        # Transfer input data to the GPU.
-        [cuda.memcpy_htod_async(inp.device, inp.host, stream) for inp in inputs]
-        # Run inference.
-        context.execute_async(batch_size=batch_size, bindings=bindings, stream_handle=stream.handle)
-        # Transfer predictions back from the GPU.
-        [cuda.memcpy_dtoh_async(out.host, out.device, stream) for out in outputs]
-        # Synchronize the stream
-        stream.synchronize()
-        # Return only the host outputs.
-        return outputs
-
     """
     """
-    @XContext.get_context()
     def initialize(self, *args, **kwargs):
-        option = dict() if self.config['option'] is None else self.config['option']
-        self.engine = self._build_engine(
-            self.config['parameters'], **option)
-        self.context = self.engine.create_execution_context()
-        self.buffers = self.inputs, self.outputs, self.bindings = \
-            self._allocate_buffers(self.engine, self.context)
-        self.stream = cuda.Stream()
+        if self.root is None:
+            self.root = kwargs['root'] if 'root' in kwargs else XManager.RootParameter
+            path = '{}/{}'.format(self.root, self.config['parameters'])
+            self.deserializeTRTEngine(path)
+            self.allocateBuffers()
 
-    def _build_engine(self, path_onnx:str, **kwargs):
-        assert os.path.exists(path_onnx)
-        serialize = False if 'serialize' not in kwargs \
-            else bool(kwargs['serialize'])
-        if serialize is True:
-            engine = self._build_engine_trt(path_onnx, **kwargs)
-        else:
-            engine = self._build_engine_onnx(path_onnx, **kwargs)
-        return engine
-
-    def _build_engine_trt(self, path_onnx:str, **kwargs):
-        builder = trt.Builder(XEngineTensorRT.TRT_LOGGER)
-        path_trt = '{}.trt'.format(path_onnx[:-5])
-        if os.path.exists(path_trt) is False:
-            self.serialize_engine(path_onnx, path_trt, builder, **kwargs)
-        return self.deserialize_engine(path_trt)
-
-    def _build_engine_onnx(self, path_onnx, **kwargs):
-        builder = trt.Builder(XEngineTensorRT.TRT_LOGGER)
-        config = self._create_config(builder, **kwargs)
-        network = self._parse_onnx_model(builder, path_onnx)
-        return builder.build_engine(network, config)
-
-    def _create_config(self, builder, **kwargs):
-        config = builder.create_builder_config()
-        workspace_size = 1 if 'max_workspace_size' not in kwargs \
-            else kwargs['max_workspace_size']
-        config.max_workspace_size = self._to_GiB(workspace_size)
-        precision = None if 'precision' not in kwargs else kwargs['precision']
-        if precision == 'fp16' and builder.platform_has_fast_fp16:
-            logging.info('set network precision to fp16')
-            config.set_flag(trt.BuilderFlag.FP16)
-        if precision == 'tf32' and builder.platform_has_tf32:
-            logging.info('set network precision to tf32')
-            config.clear_flag(trt.BuilderFlag.TF32)
-        if precision == 'int8' and builder.platform_has_fast_int8:
-            logging.info('set network precision to int8')
-            # TODO: not finish, please ref to:
-            # https://docs.nvidia.com/deeplearning/tensorrt/developer-guide/index.html#working-with-int8
-        return config
-
-    def _parse_onnx_model(self, builder, path_onnx):
-        network = builder.create_network(XEngineTensorRT.EXPLICIT_BATCH)
-        # parser for onnx
-        parser = trt.OnnxParser(network, XEngineTensorRT.TRT_LOGGER)
-        with open(path_onnx, 'rb') as model:
-            if not parser.parse(model.read()):
-                logging.critical('failed to parse the ONNX file: {}'.format(path_onnx))
-                for error in range(parser.num_errors):
-                    logging.error('\terror{}: {}'.format(error, parser.get_error(error)))
-                return None
-            logging.info('load model: ', path_onnx)
-        return network
-
-    def serialize_engine(self, path_onnx:str, path_trt:str, builder, **kwargs):
-        config = self._create_config(builder, **kwargs)
-        network = self._parse_onnx_model(builder, path_onnx)
-        engine = builder.build_serialized_network(network, config)
-        with open(path_trt, 'wb') as file:
-            logging.info('serialize engine: {}'.format(path_trt))
-            file.write(engine)
-
-    def deserialize_engine(self, path_trt:str):
-        trt.init_libnvinfer_plugins(XEngineTensorRT.TRT_LOGGER, '')
-        runtime = trt.Runtime(XEngineTensorRT.TRT_LOGGER)
-        with open(path_trt, 'rb') as file:
+    def deserializeTRTEngine(self, path_trt):
+        self.logger = trt.Logger(trt.Logger.ERROR)
+        trt.init_libnvinfer_plugins(XEngineTensorRT.TRT_LOGGER, namespace='')
+        # runtime = trt.Runtime(XEngineTensorRT.TRT_LOGGER)
+        with open(path_trt, "rb") as f, trt.Runtime(self.logger) as runtime:
+            assert runtime
+            self.engine = runtime.deserialize_cuda_engine(f.read())
             logging.info('deserialize engine: {}'.format(path_trt))
-            engine = runtime.deserialize_cuda_engine(file.read())
-            return engine
+        assert self.engine
+        self.context = self.engine.create_execution_context()
+        assert self.context
 
-    # Allocates all buffers required for an engine, i.e. host/device inputs/outputs.
-    def _allocate_buffers(self, engine, context):
-        inputs = list()
-        outputs = list()
-        bindings = list()
-        for binding in engine:
-            # size = trt.volume(engine.get_binding_shape(binding)) * engine.max_batch_size
-            # dtype = trt.nptype(engine.get_binding_dtype(binding))
-            index = engine.get_binding_index(binding)
-            size = trt.volume(context.get_binding_shape(index)) * engine.max_batch_size
-            dtype = trt.nptype(engine.get_binding_dtype(binding))
-            # Allocate host and device buffers
-            host_mem = cuda.pagelocked_empty(size, dtype)
-            device_mem = cuda.mem_alloc(host_mem.nbytes)
-            # Append the device buffer to device bindings.
-            bindings.append(int(device_mem))
-            # Append to the appropriate list.
-            if engine.binding_is_input(binding):
-                inputs.append(HostDeviceMem(host_mem, device_mem, binding))
+    @staticmethod
+    def cuda_call(call):
+        err, res = call[0], call[1:]
+        if isinstance(err, cuda.CUresult):
+            if err != cuda.CUresult.CUDA_SUCCESS:
+                raise RuntimeError("Cuda Error: {}".format(err))
+        if isinstance(err, cudart.cudaError_t):
+            if err != cudart.cudaError_t.cudaSuccess:
+                raise RuntimeError("Cuda Runtime Error: {}".format(err))
+        else:
+            raise RuntimeError("Unknown error type: {}".format(err))
+        if len(res) == 1:
+            res = res[0]
+        return res
+
+    def allocateBuffers(self):
+        for i in range(self.engine.num_io_tensors):
+            name = self.engine.get_tensor_name(i)
+            is_input = False
+            if self.engine.get_tensor_mode(name) == trt.TensorIOMode.INPUT:
+                is_input = True
+            dtype = self.engine.get_tensor_dtype(name)
+            shape = self.engine.get_tensor_shape(name)
+            if is_input:
+                self.batch_size = shape[0]
+            size = np.dtype(trt.nptype(dtype)).itemsize
+            for s in shape:
+                s = s if s > 0 else 100
+                size *= s
+            # logging.info(name, shape, dtype, size)
+            allocation = self.cuda_call(cudart.cudaMalloc(size))
+            binding = {
+                "index": i,
+                "name": name,
+                "dtype": np.dtype(trt.nptype(dtype)),
+                "shape": list(shape),
+                "allocation": allocation,
+                "size": size,
+            }
+            self.allocations.append(allocation)
+            if is_input:
+                self.inputs.append(binding)
             else:
-                outputs.append(HostDeviceMem(host_mem, device_mem, binding))
-        return inputs, outputs, bindings
+                self.outputs.append(binding)
+
+        assert self.batch_size > 0
+        assert len(self.inputs) > 0
+        assert len(self.outputs) > 0
+        assert len(self.allocations) > 0
 
     """
     """
-    @XContext.get_context('maximum', 'maximum', 'maximum')
-    def inference(self, inputs:list[np.ndarray], *args, **kwargs):
-        self._assign(inputs, self.inputs)
-        trt_outputs = self._do_inference_v2(
-            self.context, bindings=self.bindings, inputs=self.inputs, outputs=self.outputs, stream=self.stream)
-        return [out.host for out in trt_outputs]
+    def input_spec(self):
+        """
+        Get the specs for the input tensor of the network. Useful to prepare memory allocations.
+        :return: Two items, the shape of the input tensor and its (numpy) datatype.
+        """
+        return self.inputs[0]["shape"], self.inputs[0]["dtype"]
+    
+    def output_spec(self):
+        """
+        Get the specs for the output tensors of the network. Useful to prepare memory allocations.
+        :return: A list with two items per element, the shape and (numpy) datatype of each output tensor.
+        """
+        specs = []
+        for o in self.outputs:
+            shape = [v if v > 0 else 100 for v in o["shape"]]
+            specs.append((shape, o["dtype"]))
+        return specs
 
-    def _assign(self, inputs:list[np.ndarray], hdm_list:list[HostDeviceMem]):
-        assert len(inputs) == len(hdm_list)
-        for array, hdm in zip(inputs, hdm_list):
-            np.copyto(hdm.host, array.ravel())
+    @staticmethod
+    def memcpy_host_to_device(device_ptr: int, host_arr: np.ndarray):
+        nbytes = host_arr.size * host_arr.itemsize
+        XEngineTensorRT.cuda_call(cudart.cudaMemcpy(device_ptr, host_arr, nbytes, cudart.cudaMemcpyKind.cudaMemcpyHostToDevice))
 
-    # This function is generalized for multiple inputs/outputs for full dimension networks.
-    # inputs and outputs are expected to be lists of HostDeviceMem objects.
-    def _do_inference_v2(self, context, bindings, inputs, outputs, stream):
-        # Transfer input data to the GPU.
-        [cuda.memcpy_htod_async(inp.device, inp.host, stream) for inp in inputs]
-        # Run inference.
-        context.execute_async_v2(bindings=bindings, stream_handle=stream.handle)
-        # Transfer predictions back from the GPU.
-        [cuda.memcpy_dtoh_async(out.host, out.device, stream) for out in outputs]
-        # Synchronize the stream
-        stream.synchronize()
-        # Return only the host outputs.
+    @staticmethod
+    def memcpy_device_to_host(host_arr: np.ndarray, device_ptr: int):
+        # Wrapper for cudaMemcpy which infers copy size and does error checking
+        nbytes = host_arr.size * host_arr.itemsize
+        XEngineTensorRT.cuda_call(cudart.cudaMemcpy(host_arr, device_ptr, nbytes, cudart.cudaMemcpyKind.cudaMemcpyDeviceToHost))
+
+    def inference(self, batch):
+        """
+        Execute inference on a batch of images. The images should already be batched and preprocessed, as prepared by
+        the ImageBatcher class. Memory copying to and from the GPU device will be performed here.
+        :param batch: A numpy array holding the image batch.
+        :param scales: The image resize scales for each image in this batch. Default: No scale postprocessing applied.
+        :return: A nested list for each image in the batch and each detection in the list.
+        """
+
+        # Prepare the output data.
+        outputs = []
+        for shape, dtype in self.output_spec():
+            outputs.append(np.zeros(shape, dtype))
+
+        # Process I/O and execute the network.
+        self.memcpy_host_to_device(
+            self.inputs[0]["allocation"], np.ascontiguousarray(batch))
+
+        self.context.execute_v2(self.allocations)
+        for o in range(len(outputs)):
+            self.memcpy_device_to_host(outputs[o], self.outputs[o]["allocation"])
         return outputs
 
-
-
-class XEngineTensorRT_DynamicContext(XEngineTensorRT):
-    def __init__(self, config:dict):
-        super(XEngineTensorRT_DynamicContext, self).__init__(config)
-
-    """
-    """
-    @XContext.get_context()
-    def initialize(self, *args, **kwargs):
-        self.engine = self._build_engine(
-            self.config['parameters'], **self.config['option'])
-        self.stream = cuda.Stream()
-        self.context = None if bool(self.config['option']['dynamic_context']) \
-            else self.engine.create_execution_context()
-
-    """
-    """
-    @XContext.get_context('maximum', 'maximum', 'maximum')
-    def inference(self, inputs:list[np.ndarray], *args, **kwargs):
-        context = self._dynamic_context()
-        buffers = self._allocate_buffers(self.engine, context)
-        self._assign(inputs, buffers[0])
-        trt_outputs = self._do_inference_v2(
-            context, bindings=buffers[2], inputs=buffers[0], outputs=buffers[1], stream=self.stream)
-        return [out.host for out in trt_outputs]
-
-    def _dynamic_context(self):
-        return self.context if self.context is not None else \
-            self.engine.create_execution_context()
-
-
-
-class LibEngineTensorRT_DynamicShape(XEngineTensorRT):
-    def __init__(self, config:dict):
-        super(LibEngineTensorRT_DynamicShape, self).__init__(config)
-
-    def _create_config(self, builder, **kwargs):
-        config = XEngineTensorRT._create_config(self, builder, **kwargs)
-        profile = builder.create_optimization_profile()
-        shape_optimize = kwargs['shape_optimize']
-        assert isinstance(shape_optimize, dict)
-        for binding, shape in shape_optimize.items():
-            assert len(shape) == 3 # for: (min,opt,max)
-            profile.set_shape(binding, *shape)
-        config.add_optimization_profile(profile)
-        return config
-
-    """
-    """
-    @XContext.get_context()
-    def initialize(self, *args, **kwargs):
-        self.engine = self._build_engine(
-            self.config['parameters'], **self.config['option'])
-        self.stream = cuda.Stream()
-        # dynamic context
-        dynamic_context = None if 'dynamic_context' not in self.config['option'] \
-            else self.config['option']['dynamic_context']
-        self.context = None if bool(dynamic_context) \
-            else self.engine.create_execution_context()
-
-    """
-    """
-    @XContext.get_context('maximum', 'maximum', 'maximum')
-    def inference(self, inputs:list[np.ndarray], *args, **kwargs):
-        context = self._dynamic_context()
-        for n, array in enumerate(inputs):
-            context.set_binding_shape(n, array.shape)
-        buffers = self._allocate_buffers(self.engine, context)
-        # inference
-        self._assign(inputs, buffers[0])
-        trt_outputs = self._do_inference_v2(
-            context, bindings=buffers[2], inputs=buffers[0], outputs=buffers[1], stream=self.stream)
-        return [out.host for out in trt_outputs]
-
-    def _dynamic_context(self):
-        return self.context if self.context is not None else \
-            self.engine.create_execution_context()
