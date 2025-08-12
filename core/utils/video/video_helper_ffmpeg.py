@@ -5,7 +5,7 @@ import os
 import subprocess
 
 
-class FFMPEGHelper:
+class XVideoHelperFfmpeg:
     """
     """
 
@@ -177,7 +177,7 @@ class FFMPEGHelper:
 
     @staticmethod
     def checkVideoFPS(path_video, diff_max=3, loglevel='warning') -> bool:
-        is_success, list_r_frame_rate, list_avg_frame_rate = FFMPEGHelper.getVideoPropertyFPS(path_video, loglevel)
+        is_success, list_r_frame_rate, list_avg_frame_rate = XVideoHelperFfmpeg.getVideoPropertyFPS(path_video, loglevel)
         if is_success is True:
             r_frame_rate = float(list_r_frame_rate[0]) / float(list_r_frame_rate[1])
             avg_frame_rate = float(list_avg_frame_rate[0]) / float(list_avg_frame_rate[1])

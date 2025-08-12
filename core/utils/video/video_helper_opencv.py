@@ -4,12 +4,11 @@ import logging
 import cv2
 import numpy as np
 import tqdm
-import platform
-from .video_reader import XVideoReader
-from .video_writer import XVideoWriter
+from .video_reader_opencv import XVideoReaderOpenCV
+from .video_writer_opencv import XVideoWriterOpenCV
 
 
-class XVideoHelper:
+class XVideoHelperOpenCV:
     """
     """
     @staticmethod
@@ -18,16 +17,15 @@ class XVideoHelper:
             return '{}.{}'.format(os.path.splitext(path)[0], suffix)
 
         assert os.path.exists(path_video_source), path_video_source
-        reader_source = XVideoReader(path_video_source)
+        reader_source = XVideoReaderOpenCV(path_video_source)
         config = reader_source.desc(True)
-        config['fourcc'] = XVideoWriter.default_fourcc()
         path_video_target = replaceSuffix(path_video_target, 'mp4')
         if 'path_video_format' in kwargs:
             path_video_format = kwargs['path_video_format']
             assert os.path.exists(path_video_format), path_video_format
-            config['fourcc'] = XVideoReader(path_video_format).fourcc
+            config['fourcc'] = XVideoReaderOpenCV(path_video_format).fourcc
             path_video_target = replaceSuffix(path_video_target, os.path.splitext(path_video_format)[-1][1:])
-        writer_target = XVideoWriter(config)
+        writer_target = XVideoWriterOpenCV(config)
         writer_target.open(path_video_target)
         desc = kwargs.pop('desc', 'reformat video: {} --> {}'.format(reader_source.fourcc, config['fourcc']))
         # print('reformat video: {} --> {}'.format(reader_source.fourcc, reader_format.fourcc))
@@ -38,8 +36,8 @@ class XVideoHelper:
 
     @staticmethod
     def captureVideoPart(path_video_or_reader, time_beg, time_end, pos_lft, pos_rig, pos_top, pos_bot, **kwargs):
-        assert isinstance(path_video_or_reader, (XVideoReader, str)), type(path_video_or_reader)
-        reader = XVideoReader(path_video_or_reader) if isinstance(path_video_or_reader, str) else path_video_or_reader
+        assert isinstance(path_video_or_reader, (XVideoReaderOpenCV, str)), type(path_video_or_reader)
+        reader = XVideoReaderOpenCV(path_video_or_reader) if isinstance(path_video_or_reader, str) else path_video_or_reader
         if reader.isOpen():
             assert 0 <= time_beg < time_end <= reader.num_frame, \
                 (time_beg, time_end, reader.num_frame)
@@ -66,7 +64,7 @@ class XVideoHelper:
                 return path_list, len(path_list)
             if 'path_save_video' in kwargs:
                 path_save_video = kwargs['path_save_video']
-                writer = XVideoWriter(reader.desc(False))
+                writer = XVideoWriterOpenCV(reader.desc(False))
                 writer.open(path_save_video)
                 # function = lambda n, bgr: writer.write(bgr[pos_top:pos_bot, pos_lft:pos_rig, :])
                 # iter = map(function, range(num_cap_frames), reader)
@@ -89,7 +87,7 @@ class XVideoHelper:
     @staticmethod
     def splitVideoByTime(path_video, path_save, **kwargs) -> list:
         assert os.path.exists(path_video), path_video
-        reader = XVideoReader(path_video)
+        reader = XVideoReaderOpenCV(path_video)
         if reader.isOpen():
             num_videos = 0
             index_pair_list = []
@@ -144,10 +142,10 @@ class XVideoHelper:
         assert os.path.isdir(path_video_out), path_video_out
         assert 1 < num_split < 32, num_split
         assert axis == 0 or axis == 1, axis
-        reader = XVideoReader(path_video_in)
+        reader = XVideoReaderOpenCV(path_video_in)
         writer_list = []
         for n in range(num_split):
-            writer = XVideoWriter(reader.desc(with_hw=False))
+            writer = XVideoWriterOpenCV(reader.desc(with_hw=False))
             full_name = os.path.split(path_video_in)[1]
             pure_name, ext = os.path.splitext(full_name)
             writer.open('{}/{}-{}.{}'.format(path_video_out, pure_name, n, ext[1:]))
@@ -166,7 +164,7 @@ class XVideoHelper:
         reader_list = list()
         config = None
         for n, path_in in enumerate(path_in_list):
-            reader = XVideoReader(path_in)
+            reader = XVideoReaderOpenCV(path_in)
             assert reader.isOpen(), 'open video fail: {}'.format(path_in)
             if config is not None:
                 current = reader.desc(True)
@@ -178,7 +176,7 @@ class XVideoHelper:
             reader_list.append(reader)
         axis_str = 'h' if axis == 0 else 'w'
         config[axis_str] *= len(reader_list)
-        writer = XVideoWriter(config)
+        writer = XVideoWriterOpenCV(config)
         writer.open(path_out)
         desc = kwargs.pop('desc', 'concatenate videos')
         with tqdm.tqdm(total=config['num_frames'], desc=desc, unit='image') as bar:
@@ -193,7 +191,7 @@ class XVideoHelper:
         config_global = None
         sum_frames = 0
         for path_in in path_in_list:
-            reader = XVideoReader(path_in)
+            reader = XVideoReaderOpenCV(path_in)
             assert reader.isOpen()
             config_global = reader.desc() if config_global is None else config_global
             config_current = reader.desc()
@@ -202,7 +200,7 @@ class XVideoHelper:
                 (config_global, config_current)
             reader_list.append(reader)
             sum_frames += reader.desc()['num_frames']
-        writer = XVideoWriter(config_global)
+        writer = XVideoWriterOpenCV(config_global)
         writer.open(path_out)
         desc = kwargs.pop('desc', 'concatenate videos by time')
         with tqdm.tqdm(total=sum_frames, desc=desc, unit='image') as bar:
@@ -217,7 +215,7 @@ class XVideoHelper:
     @staticmethod
     def mergeFromImages(path_images:str, path_video:str, config=dict(), **kwargs):
         h, w = cv2.imdecode(np.fromfile(path_images[0], dtype=np.uint8), cv2.IMREAD_COLOR).shape[:2]
-        writer = XVideoWriter(dict(h=h, w=w, **config))
+        writer = XVideoWriterOpenCV(dict(h=h, w=w, **config))
         writer.open(path_video)
         desc = kwargs.pop('desc', 'merge images into video')
         with tqdm.tqdm(total=len(path_images), desc=desc, unit='image') as bar:
@@ -233,13 +231,13 @@ class XVideoHelper:
     def resizeResolution(path_video_in:str, path_video_out:str, new_height=0.5, new_width=0.5, **kwargs):
         assert os.path.isfile(path_video_in)
         assert new_height > 0 and new_width > 0, (new_height, new_width)
-        reader = XVideoReader(path_video_in)
+        reader = XVideoReaderOpenCV(path_video_in)
         if reader.isOpen() is False:
             logging.warning('open video fail...')
         config = reader.desc()
         h = config['h'] = int(round(new_height))
         w = config['w'] = int(round(new_width))
-        writer = XVideoWriter(config)
+        writer = XVideoWriterOpenCV(config)
         writer.open(path_video_out)
         desc = kwargs.pop('desc', 'size video')
         with tqdm.tqdm(total=reader.num_frame, desc=desc, unit='image') as bar:

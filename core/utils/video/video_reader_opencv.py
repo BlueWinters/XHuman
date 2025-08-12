@@ -3,12 +3,11 @@ import os
 import logging
 import cv2
 import numpy as np
-import tqdm
 import tempfile
 from typing import Union, List, Tuple, Dict, Any
 
 
-class XVideoReader:
+class XVideoReaderOpenCV:
     """
     """
     @staticmethod
@@ -53,7 +52,7 @@ class XVideoReader:
             self.w = int(capture.get(cv2.CAP_PROP_FRAME_WIDTH))
             self.h = int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
             self.fps = int(capture.get(cv2.CAP_PROP_FPS))
-            self.fourcc = XVideoReader.decode_Codec(int(capture.get(cv2.CAP_PROP_FOURCC)))
+            self.fourcc = XVideoReaderOpenCV.decode_Codec(int(capture.get(cv2.CAP_PROP_FOURCC)))
             self.num_frame = int(capture.get(cv2.CAP_PROP_FRAME_COUNT))
             self.num_sec = int(self.num_frame / self.fps)
 
@@ -135,12 +134,12 @@ class XVideoReader:
     def dumpFrames(self, path_save, step=1, **kwargs):
         assert self.isOpen() is True
         assert 0 < step < self.num_frame
-        format = kwargs['format'] if 'format' in kwargs \
+        format_function = kwargs['format'] if 'format' in kwargs \
             else lambda n: '{:05d}.png'.format(n)
-        suffix = format(0).split('.')[1]
+        suffix = format_function(0).split('.')[1]
         assert len(suffix) > 0, suffix
         for n in range(self.num_frame):
             _, bgr = self.read()
             if n % step == 0:
-                path = '{}/{}'.format(path_save, format(n))
+                path = '{}/{}'.format(path_save, format_function(n))
                 cv2.imencode('.{}'.format(suffix), bgr)[1].tofile(path)
