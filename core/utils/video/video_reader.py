@@ -23,8 +23,16 @@ class XVideoReader:
     """
     def __init__(self, path_or_stream: Union[str, bytes]):
         self._config(self._open(path_or_stream))
+        self.cur = 0
 
     def _open(self, path_or_stream) -> cv2.VideoCapture:
+        """
+        warning: global cap.cpp:342 open VIDEOIO(FFMPEG):
+            backend is generally available but can't be used to capture by index
+        solution: use cv2.CAP_ANY to disable this warning
+        reference: opencv/modules/videoio/src/cap.cpp
+        """
+        cv2.setLogLevel(0)
         capture = cv2.VideoCapture(cv2.CAP_FFMPEG)
         if isinstance(path_or_stream, bytes):
             stream = path_or_stream
@@ -79,6 +87,7 @@ class XVideoReader:
         ret, bgr = self.capture.read()
         if ret is False:
             raise StopIteration
+        self.cur += 1
         return bgr
 
     def __len__(self):

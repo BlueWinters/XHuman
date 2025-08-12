@@ -5,8 +5,8 @@ import cv2
 import numpy as np
 import tqdm
 import platform
-from .video_reader import *
-from .video_writer import *
+from .video_reader import XVideoReader
+from .video_writer import XVideoWriter
 
 
 class XVideoHelper:
@@ -46,7 +46,8 @@ class XVideoHelper:
             assert 0 <= pos_lft < pos_rig <= reader.w, (pos_lft, pos_rig, reader.w)
             assert 0 <= pos_top < pos_bot <= reader.h, (pos_top, pos_bot, reader.h)
             reader.resetPositionByIndex(time_beg)
-            num_cap_frames = time_end - time_beg
+            num_cap_frames = time_end - time_beg  # do not include the last
+            path_list = []
             if 'path_save_images' in kwargs:
                 path_save_images = kwargs['path_save_images']
                 assert os.path.isdir(path_save_images), path_save_images
@@ -55,10 +56,14 @@ class XVideoHelper:
                 desc = kwargs.pop('desc', 'capture video into images')
                 with tqdm.tqdm(total=num_cap_frames, desc=desc, unit='image') as bar:
                     for n in range(num_cap_frames):
-                        _, bgr = reader.read()
-                        cv2.imwrite('{}/{:04d}.png'.format(path_save_images, n), bgr[pos_top:pos_bot, pos_lft:pos_rig, :])
+                        flag, bgr = reader.read()
+                        if flag is False:
+                            break
+                        path = '{}/{:04d}.png'.format(path_save_images, n)
+                        cv2.imwrite(path, bgr[pos_top:pos_bot, pos_lft:pos_rig, :])
+                        path_list.append(path)
                         bar.update(1)
-                return None
+                return path_list, len(path_list)
             if 'path_save_video' in kwargs:
                 path_save_video = kwargs['path_save_video']
                 writer = XVideoWriter(reader.desc(False))
@@ -67,45 +72,69 @@ class XVideoHelper:
                 # iter = map(function, range(num_cap_frames), reader)
                 desc = kwargs.pop('desc', 'capture video into video')
                 with tqdm.tqdm(total=num_cap_frames, desc=desc, unit='image') as bar:
+                    count = 0
                     for n in range(num_cap_frames):
-                        _, bgr = reader.read()
+                        flag, bgr = reader.read()
+                        if flag is False:
+                            break
                         writer.write(bgr[pos_top:pos_bot, pos_lft:pos_rig, :])
+                        count += 1
                         bar.update(1)
-                return None
+                    path_list.append(writer.path)
+                return path_list[0], count
             raise ValueError('path_save_images or path_save_video not in kwargs')
         else:
             raise IOError('source video do not open successful: {}'.format(path_video_or_reader))
 
     @staticmethod
-    def splitVideoByTime(path_video, path_save, **kwargs):
+    def splitVideoByTime(path_video, path_save, **kwargs) -> list:
         assert os.path.exists(path_video), path_video
         reader = XVideoReader(path_video)
         if reader.isOpen():
-            num_frames = kwargs.pop('num_frames', 0)
-            if not (0 < num_frames < reader.num_frame):
-                if 'num_seconds' in kwargs:
-                    num_seconds = kwargs['num_seconds']
-                    num_seconds_all = reader.num_frame / reader.fps
-                    if 0 < num_seconds < int(num_seconds_all):
-                        num_frames = reader.fps * num_seconds
-                if 'num_videos' in kwargs:
-                    num_videos = kwargs['num_videos']
-                    if 0 < num_videos < reader.num_frame:
-                        num_frames = int(reader.num_frame / num_videos)  # the last video is bigger
-            # split video
-            num_frames_per = num_frames
-            num_videos = int(np.ceil(reader.num_frame / num_frames_per))
-            assert os.path.isdir(path_save), path_save
-            prefix, suffix = reader.prefix(), reader.suffix()
-            desc = kwargs.pop('desc', 'split video by time')
-            with tqdm.tqdm(total=num_videos, desc=desc, unit='image') as bar:
+            num_videos = 0
+            index_pair_list = []
+            if 'num_frames' in kwargs:
+                num_frames = kwargs.pop('num_frames')
+                if not (0 < num_frames < reader.num_frame):
+                    if 'num_seconds' in kwargs:
+                        num_seconds = kwargs['num_seconds']
+                        num_seconds_all = reader.num_frame / reader.fps
+                        if 0 < num_seconds < int(num_seconds_all):
+                            num_frames = reader.fps * num_seconds
+                    if 'num_videos' in kwargs:
+                        num_videos = kwargs['num_videos']
+                        if 0 < num_videos < reader.num_frame:
+                            num_frames = int(reader.num_frame / num_videos)  # the last video is bigger
+                num_frames_per = num_frames
+                num_videos = int(np.ceil(reader.num_frame / num_frames_per))
                 for n in range(0, num_videos):
                     beg = (n + 0) * num_frames_per
                     end = (n + 1) * num_frames_per
-                    end = min(end, reader.num_frame)
+                    end = min(end, len(reader))
+                    index_pair_list.append((beg, end))
+            if 'index_pair_list' in kwargs:
+                index_list = kwargs.pop('index_pair_list')
+                for index_pair in index_list:
+                    beg, end = index_pair
+                    assert isinstance(beg, int), beg
+                    assert isinstance(end, int), end
+                    # index: index beg, exclude end
+                    assert 0 <= beg < end <= len(reader), (beg, end, len(reader))
+                    index_pair_list.append((beg, end))
+                num_videos = len(index_pair_list)
+            # split video
+            assert os.path.isdir(path_save), path_save
+            prefix, suffix = reader.prefix(), reader.suffix()
+            desc = kwargs.pop('desc', 'split video by time')
+            result_list = []
+            with tqdm.tqdm(total=num_videos, desc=desc, unit='image') as bar:
+                for n, (beg, end) in enumerate(index_pair_list):
                     path = '{}/{}-{:02d}.{}'.format(path_save, prefix, n+1, suffix)
-                    XVideoHelper.captureVideoPart(reader, beg, end, 0, reader.w, 0, reader.h, path_save_video=path)
+                    path, counter = XVideoHelper.captureVideoPart(
+                        reader, beg, end, 0, reader.w, 0, reader.h, path_save_video=path)
+                    result_list.append((path, counter))
                     bar.update(1)
+            return result_list
         else:
             raise IOError('source video do not open successful: {}'.format(path_video))
 
@@ -161,16 +190,19 @@ class XVideoHelper:
     @staticmethod
     def concatenateVideosByTime(path_in_list, path_out, **kwargs):
         reader_list = list()
-        config = None
+        config_global = None
         sum_frames = 0
         for path_in in path_in_list:
             reader = XVideoReader(path_in)
             assert reader.isOpen()
-            config = reader.desc() if config is None else config
-            assert config == reader.desc(), (config, reader.desc())
+            config_global = reader.desc() if config_global is None else config_global
+            config_current = reader.desc()
+            assert config_global['w'] == config_current['w'] and \
+                   config_global['h'] == config_current['h'], \
+                (config_global, config_current)
             reader_list.append(reader)
             sum_frames += reader.desc()['num_frames']
-        writer = XVideoWriter(config)
+        writer = XVideoWriter(config_global)
         writer.open(path_out)
         desc = kwargs.pop('desc', 'concatenate videos by time')
         with tqdm.tqdm(total=sum_frames, desc=desc, unit='image') as bar:
@@ -214,5 +246,4 @@ class XVideoHelper:
             for bgr in reader:
                 writer.write(cv2.resize(bgr, (w, h)))
                 bar.update(1)
-
 

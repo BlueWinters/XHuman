@@ -3,36 +3,21 @@ import copy
 import os
 import logging
 import cv2
+import ffmpeg
 import numpy as np
-import tempfile
 import platform
-import queue
-import threading
-import subprocess
-from typing import List
+import typing
 
 
 class XVideoWriter:
     """
     """
     @staticmethod
-    def reformatVideo(path_video_source, path_video_target):
-        if platform.system().lower() == 'linux':
-            # example: ffmpeg -i source.avi -c:v copy -c:a copy target.mp4
-            command = ['ffmpeg', '-i', path_video_source, '-loglevel', 'warning', '-codec:v', 'libx264', '-codec:a', 'aac', path_video_target]
-            subprocess.run(command)
-            logging.warning('finish reformat with ffmpeg: {}'.format(command))
-        else:
-            logging.warning('only linux system support ffmpeg')
+    def getBackend(name):
+        return dict(linux='opencv', windows='opencv')[name]
 
     @staticmethod
-    def reformatVideoTo(path_video_source, suffix='.mp4'):
-        path_video_target = '{}{}'.format(os.path.splitext(path_video_source)[0], suffix)
-        XVideoWriter.reformatVideo(path_video_source, path_video_target)
-        return path_video_target
-
-    @staticmethod
-    def visualFrameNumber(bgr, n:int, color=(255, 255, 255)):
+    def visualFrameNumber(bgr, n: int, color=(255, 255, 255)):
         h, w, c = bgr.shape
         rect_th = max(round((w + h) / 2 * 0.003), 2)
         text_th = max(rect_th - 1, 2)
@@ -42,156 +27,143 @@ class XVideoWriter:
         cv2.putText(bgr, str(n), (points_x, points_y), 0, text_size, color, thickness=text_th)
         return bgr
 
-    @staticmethod
-    def default_fourcc():
-        return 'X', 'V', 'I', 'D'
-
-    @staticmethod
-    def default_suffix():
-        return '.avi'
-
-    @staticmethod
-    def default_FPS():
-        return 16
-
-    """
-    """
-    ConfigForceDefaultFormat = True
-
-    @property
-    def isForceDefaultFormat(self):
-        if platform.system().lower() == 'windows':
-            return False
-        return XVideoWriter.ConfigForceDefaultFormat
-
     """
     """
     def __init__(self, config: dict):
+        self.path = None
+        self.platform = platform.system().lower()
+        self.backend = config.pop('backend', self.getBackend(self.platform))
+        self.fourcc = config.pop('fourcc', self.getDefault('fourcc'))
+        self.fps = config.pop('fps', self.getDefault('fps'))
+        self.w = config.pop('w', -1)
+        self.h = config.pop('h', -1)
+        # function
+        self.function_write = None
+        self.function_initialize = getattr(self, '{}_initialize'.format(self.backend))
+        self.function_open = getattr(self, '{}_open'.format(self.backend))
+        self.function_release = getattr(self, '{}_release'.format(self.backend))
         self.counter = 0
-        self._config(config)
+        self.visual_index = bool(config.pop('visual_index', False))
+        # opencv
+        self.opencv_writer = None
+        # ffmpeg
+        self.ffmpeg_writer = None
+        self.buffer_size = config.pop('buffer_size', self.getDefault('buffer_size'))
 
     def __del__(self):
         self.release()
 
-    def _config(self, config: dict):
-        self.fps = config['fps'] if 'fps' in config \
-            else XVideoWriter.default_FPS()
-        self.fourcc = config['fourcc'] if 'fourcc' in config \
-            else XVideoWriter.default_fourcc()
-        assert len(self.fourcc) == 4
-        if 'h' in config and 'w' in config:
-            self.w = config['w']
-            self.h = config['h']
-        else:
-            self.w = self.h = -1
-        # visual frame index
-        self.visual_index = bool(config['visual_index'] if 'visual_index' in config else False)
+    def __str__(self):
+        return 'platform={}, backend={}, fourcc={}, fps={}, w={}, h={}'.format(
+            self.platform, self.backend, self.fourcc, self.fourcc, self.w, self.h)
 
-    @staticmethod
-    def _getOpencvWriter(path, fps, w, h, fourcc):
-        assert len(fourcc) == 4, fourcc
-        writer = cv2.VideoWriter()
-        code = cv2.VideoWriter_fourcc(*fourcc)
-        writer.open(path, code, fps, (w, h), True)
-        return writer.isOpened(), writer
+    def getDefault(self, key):
+        return {
+            'windows': {
+                'fourcc': ('X', 'V', 'I', 'D'),
+                'suffix': '.avi',
+                'fps': 30,
+                'buffer_size': None,
+            },
+            'linux': {
+                'fourcc': ('X', 'V', 'I', 'D'),
+                'suffix': '.avi',
+                'fps': 30,
+                'buffer_size': '1024K',
+            },
+        }[self.platform][key]
 
-    @staticmethod
-    def _getWriter(path, fps, w, h, fourcc, backend='opencv'):
-        is_open, video_writer = XVideoWriter._getOpencvWriter(path, fps, w, h, fourcc)
-        if is_open is False:
-            video_writer.release()
-            logging.warning('open file fail: {}'.format(path))
-            raise IOError(path)
-        return video_writer
+    def open(self, path: str) -> str:
+        return self.function_open(path)
 
-    """
-    for multi step writer
-    usage:
-        writer.open(path_out)
-        for frame in frame_list:
-            writer.write(frame)
-    """
-    @property
-    def writer(self):
-        if hasattr(self, '_writer') is False:
-            self._writer = self._getWriter(self.path, self.fps, self.w, self.h, self.fourcc)
-            self._handle = lambda bgr: self._writer.write(bgr)  # lambda function for writing
-        return self._handle
-
-    def open(self, path: str):
-        if hasattr(self, 'path') is False:
-            assert os.path.exists(os.path.split(path)[0])
-            self.path_source = copy.copy(path)
-            self.path = copy.copy(path)  # the final path for writing
-            if XVideoWriter.isForceDefaultFormat:
-                self.path = '{}{}'.format(os.path.splitext(self.path)[0], XVideoWriter.default_suffix())
-                self.fourcc = self.default_fourcc()
-            if self.h != -1 and self.w != -1:
-                _ = self.writer  # to initialize, get a writer handle
-        return self
-
-    def release(self, reformat=True):
-        if hasattr(self, '_writer'):
-            if isinstance(self._writer, cv2.VideoWriter) and self._writer.isOpened():
-                self._writer.release()
-                if self.path_source != self.path and reformat is True:
-                    self.reformatVideo(self.path, self.path_source)
-                return True
-        return False
+    def release(self) -> bool:
+        return self.function_release()
 
     def write(self, image: np.ndarray):
         assert len(image.shape) == 3 and image.shape[2] == 3, image.shape
         if self.h == -1 or self.w == -1:
             self.h, self.w = image.shape[:2]
+            self.function_initialize()
         assert self.h == image.shape[0] and self.w == image.shape[1], (self.h, self.w, image.shape)
         self.counter += 1
         if self.visual_index is True:
             image = self.visualFrameNumber(np.copy(image), self.counter)
-        self.writer(image)
+        self.function_write(image)
 
-    def dump(self, bgr_list: List[np.ndarray]):
-        for index, bgr in bgr_list:
+    def dump(self, data_list: list):
+        for index, bgr in data_list:
             assert self.counter == index, (self.counter, index)
             self.write(bgr)
 
-
-
-class XVideoWriterSynchronous(XVideoWriter):
     """
+    opencv
     """
-    def __init__(self, config):
-        super(XVideoWriterSynchronous, self).__init__(config)
+    def opencv_initialize(self):
+        if self.opencv_writer is None and self.function_write is None:
+            assert len(self.fourcc) == 4, self.fourcc
+            # if self.backend == 'opencv':
+            #     self.fourcc = self.getDefault('fourcc')
+            video_writer = cv2.VideoWriter()
+            code = cv2.VideoWriter_fourcc(*self.fourcc)
+            video_writer.open(self.path, code, self.fps, (self.w, self.h), True)
+            if video_writer.isOpened() is False:
+                video_writer.release()
+                logging.warning('open file fail: {}'.format(self.path))
+                raise IOError(self.path)
+            self.opencv_writer = video_writer
+            self.function_write = lambda bgr: self.opencv_writer.write(bgr)
+        else:
+            logging.warning('the writer has initialize: {}'.format(str(self)))
 
-    def _serializeYield(self, writer:cv2.VideoWriter):
-        self.counter = 0
-        while True:
-            image = yield self
-            writer.write(image)
+    def opencv_open(self, path: str) -> str:
+        if self.path is None:
+            assert os.path.exists(os.path.dirname(path)), self.path
+            name, suffix = os.path.splitext(path)
+            suffix_new = self.getDefault('suffix')
+            self.path = '{}{}'.format(name, suffix_new)
+            if self.h != -1 and self.w != -1:
+                logging.warning('backend opencv has reset file suffix: {} -> {}'.format(suffix, suffix_new))
+                self.opencv_initialize()
+        return self.path
 
-    @property
-    def writer(self):
-        if hasattr(self, '_writer') is False:
-            self._writer = self._getWriter(self.path, self.fps, self.w, self.h, self.fourcc)
-            self._iter = self._serializeYield(self._writer)
-            self._iter.__next__()
-            self._handle = lambda bgr: self._iter.send(bgr)  # lambda function for writing
-        return self._handle
+    def opencv_release(self) -> bool:
+        if isinstance(self.opencv_writer, cv2.VideoWriter) and self.opencv_writer.isOpened():
+            self.opencv_writer.release()
+            return True
+        return False
 
-
-
-class XVideoWriterAsynchronous(XVideoWriter):
     """
+    ffmpeg
     """
-    def __init__(self, config):
-        super(XVideoWriterAsynchronous, self).__init__(config)
+    def ffmpeg_initialize(self):
+        if self.ffmpeg_writer is None and self.function_write is None:
+            dir_name = os.path.dirname(self.path)
+            if len(dir_name) > 0:
+                assert os.path.exists(dir_name), self.path
+            assert self.h > 0 or self.w > 0, (self.w, self.h)
+            self.ffmpeg_writer = (
+                ffmpeg
+                .input('pipe:', format='rawvideo', pix_fmt='bgr24', s='{}x{}'.format(self.w, self.h))
+                .output(self.path, pix_fmt='yuv420p', r=self.fps, vcodec='libx264', bufsize=self.buffer_size)
+                .overwrite_output()
+                .run_async(pipe_stdin=True))
+            self.function_write = lambda bgr: self.ffmpeg_writer.stdin.write(bgr.astype(np.uint8).tobytes())
+        else:
+            logging.warning('the writer has initialize: {}'.format(str(self)))
 
-    @property
-    def writer(self):
-        if hasattr(self, '_writer') is False:
-            self._writer = self._getWriter(self.path, self.fps, self.w, self.h, self.fourcc)
-            self._queue = queue.Queue()
-            self._worker = threading.Thread(target=lambda image: self._writer.write(image))
-            self._worker.setDaemon(True)
-            self._worker.start()
-            self._handle = lambda bgr: self._queue.put_nowait(bgr)  # lambda function for writing
-        return self._handle
+    def ffmpeg_open(self, path: str) -> str:
+        if self.path is None:
+            self.path = copy.copy(path)  # the final path for writing
+            if self.h != -1 and self.w != -1:
+                self.ffmpeg_initialize()
+        return self.path
+
+    def ffmpeg_release(self):
+        if self.ffmpeg_writer is not None:
+            self.ffmpeg_writer.stdin.close()
+            self.ffmpeg_writer.wait()
+            self.ffmpeg_writer = None
+            return True
+        return False
+
+

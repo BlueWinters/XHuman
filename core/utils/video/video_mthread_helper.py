@@ -6,17 +6,17 @@ import traceback
 import psutil
 import numpy as np
 import threading
-from ...utils.video import XVideoReader
+from ..video import XVideoReader
 
 
 class XVideoMThreadWorker(threading.Thread):
     """
     """
-    def __init__(self, num_seq, frame_bgr_list, frame_index_beg):
+    def __init__(self, num_seq, frame_stream):
         super(XVideoMThreadWorker, self).__init__()
+        assert isinstance(frame_stream, (list, XVideoReader)), frame_stream
         self.num_seq = num_seq
-        self.frame_bgr_list = frame_bgr_list
-        self.frame_index_beg = frame_index_beg
+        self.frame_input_stream = frame_stream
         # for exception
         self.exit_code = 0
         self.exception = None
@@ -38,7 +38,7 @@ class XVideoMThreadWorker(threading.Thread):
 
     def process(self):
         # function signature template, just overridden this function for custom process
-        for frame_index, frame_bgr in enumerate(self.frame_bgr_list):
+        for frame_index, frame_bgr in enumerate(self.frame_input_stream):
             raise NotImplementedError  # TODO: process each frame
 
 
@@ -57,7 +57,7 @@ class XVideoMThreadSession:
         index_pair_list = self.getSplitIndex(len(reader), self.num_workers)
         frame_bgr_list = reader.sampleFrames(0, reader.num_frame, 1)
         for n, (beg, end) in zip(range(self.num_workers), index_pair_list):
-            worker = XVideoMThreadWorker(num_seq=n, frame_bgr_list=frame_bgr_list[beg:end+1], frame_index_beg=beg)
+            worker = XVideoMThreadWorker(num_seq=n, frame_stream=frame_bgr_list[beg:end+1])
             worker.setDaemon(False)
             worker_list.append(worker)
         return worker_list
@@ -66,7 +66,7 @@ class XVideoMThreadSession:
     def getSplitIndex(num_frames, num_workers):
         each_len = int(np.ceil(num_frames / num_workers))
         # index include the end
-        index_pair_list = [(n * each_len, min((n + 1) * each_len - 1, num_frames)) for n in range(num_workers)]
+        index_pair_list = [(n * each_len, min((n + 1) * each_len - 1, num_frames-1)) for n in range(num_workers)]
         return index_pair_list
 
     def start(self, *args, **kwargs):
