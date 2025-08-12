@@ -20,7 +20,7 @@ class XContextTemplate:
     def record(self):
         return 0
 
-    def format(self, value, type):
+    def format(self, value, info):
         return ''
 
     def measure(self, beg, end):
@@ -29,18 +29,16 @@ class XContextTemplate:
         return self.value_cur
 
 
-
 class XContextTimer(XContextTemplate):
     def __init__(self, verbose):
         super(XContextTimer, self).__init__(verbose)
 
     def record(self):
-        return time.time()
+        return time.perf_counter()
 
-    def format(self, eclipse, type):
-        header = 'time running({}):'.format(type).ljust(30)
+    def format(self, eclipse, info):
+        header = 'time running({}):'.format(info).ljust(30)
         return '{} {:.4f} ms'.format(header, eclipse * 1000)
-
 
 
 class XContextRAMMemory(XContextTemplate):
@@ -51,10 +49,9 @@ class XContextRAMMemory(XContextTemplate):
         import psutil
         return psutil.Process(os.getpid()).memory_info().rss
 
-    def format(self, num_bytes, type):
-        header = 'RAM memory changes({}):'.format(type).ljust(30)
+    def format(self, num_bytes, info):
+        header = 'RAM memory changes({}):'.format(info).ljust(30)
         return '{} {:.4f} GB'.format(header, num_bytes / 1024 / 1024 / 1024)
-
 
 
 class XContextGPUMemory(XContextTemplate):
@@ -67,11 +64,9 @@ class XContextGPUMemory(XContextTemplate):
         free, total = driver.mem_get_info()
         return total - free
 
-    def format(self, num_bytes, type):
-        header = 'GPU memory changes({}):'.format(type).ljust(30)
+    def format(self, num_bytes, info):
+        header = 'GPU memory changes({}):'.format(info).ljust(30)
         return '{} {:.4f} GB'.format(header, num_bytes / 1024 / 1024 / 1024)
-
-
 
 
 class XContext:
@@ -110,6 +105,7 @@ class XContext:
 
     def __call__(self, function):
         self.function = function
+
         def call_wrapper(*args, **kwargs):
             return XContext.measureContext(self.function, self.contexts, *args, **kwargs)
         return call_wrapper
