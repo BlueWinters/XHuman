@@ -4,6 +4,7 @@ import logging
 import cv2
 import numpy as np
 import typing
+import platform
 
 
 class XVideoWriterOpenCV:
@@ -45,6 +46,12 @@ class XVideoWriterOpenCV:
         return 'fourcc={}, fps={}, w={}, h={}, path={}'.format(
             self.fourcc, self.fourcc, self.w, self.h, self.path)
 
+    @staticmethod
+    def reformatFourcc(suffix, fourcc: str):
+        if platform.system().lower() == 'windows':
+            return dict(avi='XVID', mp4='AVC1')[suffix.lower()]
+        return fourcc
+
     @property
     def writer(self):
         if self.capture is None:
@@ -52,7 +59,8 @@ class XVideoWriterOpenCV:
             assert isinstance(self.path, str)
             assert self.h > 0 and self.w > 0, (self.h, self.w)
             self.capture = cv2.VideoWriter()
-            code = cv2.VideoWriter_fourcc(*self.fourcc)
+            fourcc = self.reformatFourcc(os.path.splitext(self.path)[1][1:], self.fourcc)
+            code = cv2.VideoWriter_fourcc(*fourcc)
             self.capture.open(self.path, code, self.fps, (self.w, self.h), True)
             if self.capture.isOpened() is False:
                 self.capture.release()

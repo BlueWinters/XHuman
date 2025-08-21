@@ -5,7 +5,7 @@ import os
 import numpy as np
 import ultralytics
 import threading
-from ..utils import XVideoReader, FFMPEGHelper
+from ..utils import XVideoReaderOpenCV, XVideoHelperFfmpeg
 from ..geometry import GeoFunction
 from .. import XManager
 
@@ -103,10 +103,10 @@ class LibUltralyticsWrapper:
     @staticmethod
     def actionDetectImageFromVideo(path_video, model, n_index, score_threshold):
         assert os.path.exists(path_video), path_video
-        reader = XVideoReader(path_video)
+        reader = XVideoReaderOpenCV(path_video)
         flag = False
         bgr = None
-        if FFMPEGHelper.checkVideoFPS(path_video, 0) is True:
+        if XVideoHelperFfmpeg.checkVideoFPS(path_video, 0) is True:
             reader.resetPositionByIndex(n_index)
             flag, bgr = reader.read()
         else:

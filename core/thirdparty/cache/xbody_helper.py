@@ -5,7 +5,7 @@ import cv2
 import numpy as np
 import typing
 from .xbody import XBody
-from ...utils.video import XVideoReader
+from ...utils.video import XVideoReaderOpenCV
 
 
 class XBodyHelper:
@@ -34,7 +34,7 @@ class XBodyHelper:
 class XBodyIteratorVideo:
     def __init__(self, path_video):
         self.path = path_video
-        self.reader = XVideoReader(path_video)
+        self.reader = XVideoReaderOpenCV(path_video)
         assert self.reader.isOpen(), path_video
 
     def __iter__(self):
