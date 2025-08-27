@@ -99,6 +99,7 @@ class XVideoReaderOpenCV:
         return False
 
     def read(self) -> Tuple[Any, np.ndarray]:
+        self.cur += 1
         ret, bgr = self.capture.read()
         return ret, bgr
 
@@ -143,3 +144,57 @@ class XVideoReaderOpenCV:
             if n % step == 0:
                 path = '{}/{}'.format(path_save, format_function(n))
                 cv2.imencode('.{}'.format(suffix), bgr)[1].tofile(path)
+
+
+class XVideoReaderOpenCVCache(XVideoReaderOpenCV):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.cache_size = kwargs.get('cache_size', 16)
+        self.cache = {}
+        self.cache_queue = []  # LRU, only index
+
+    def getFrameByIndex(self, index: int) -> np.ndarray:
+        if not (0 <= index < len(self)):
+            raise IndexError(f"Index {index} out of range [0, {len(self)-1}]")
+
+        # try to get from cache
+        if index in self.cache:
+            # update LRU
+            self.cache_queue.remove(index)
+            self.cache_queue.append(index)
+            return self.cache[index]
+
+        # reset reader
+        self.resetPositionByIndex(index)
+        ret, frame = self.read()
+
+        if ret:
+            # store in LRU cache
+            if len(self.cache) >= self.cache_size:
+                old_idx = self.cache_queue.pop(0)
+                del self.cache[old_idx]
+            self.cache[index] = frame
+            self.cache_queue.append(index)
+        else:
+            raise IOError(f"read frame {index} failed")
+        return self.cache[index]
+
+    def __getitem__(self, item):
+        """
+        support method：
+            reader[100] -> positive int
+            reader[-1]  -> negative int
+            reader[1:5] -> slice
+        """
+        if isinstance(item, slice):
+            # slice
+            indices = range(*item.indices(len(self)))
+            return [self.getFrameByIndex(i) for i in indices]
+        elif isinstance(item, int):
+            # negative index
+            if item < 0:
+                item = len(self) + item
+            return self.getFrameByIndex(item)
+        else:
+            raise TypeError(f"index must be int or slice，but got {type(item)}")
+
